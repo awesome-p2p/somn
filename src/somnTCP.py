@@ -61,14 +61,16 @@ def startSomnTx(TxAlive, TxQ):
 
 def main():
   TxQ = queue.queue
-  txAlive = threading.Event
-  RxAlive = threading.Event
+  networkAlive = threading.Event
   TxAlive.set()
   RxAlive.set()
-  Rx = startSomnRx(RxAlive, RxQ)
-  Tx = startSomnTx(TxAlive, TxQ) 
+  Rx = startSomnRx(networkAlive, RxQ)
+  Tx = startSomnTx(networkAlive, TxQ) 
   TxQ.put(testPkt)
   RxQ.get(echoPkt)     
+  networkAlive.clear()
+  Tx.join()
+  Rx.join()
 
 if __name__ == "__main__":
   main()
