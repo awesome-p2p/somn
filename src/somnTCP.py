@@ -115,10 +115,12 @@ class TxThread(threading.Thread):
         totalsent = 0
         if LOOPBACK_MODE:
           MSGLEN = len(pkt)
+          TxData = pkt
         else:
-          MSGLEN = pkt.len()
+          MSGLEN = pkt.len
+          TxData = pkt.datagram
         while  totalsent < MSGLEN:
-          sent = skt.send(pkt)
+          sent = skt.send(TxData)
           if sent == 0:
             raise RuntimeError("Python 3 sockets are dumb")
           totalsent = totalsent + sent
