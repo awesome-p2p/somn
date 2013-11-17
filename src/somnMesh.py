@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.3
 
 import somnTCP
+import somnUDP
 import somnPkt
 import somnConst
 import struct
@@ -9,29 +10,33 @@ import threading
 import socket
 
 class somnMesh(threading.Thread):
-  TxQ = queue.Queue()
-  RxQ = queue.Queue()
+  TCPTxQ = queue.Queue()
+  TCPRxQ = queue.Queue()
+  UDPRxQ = queue.Queue()
   routeTable = [(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)]
   cacheId = [0,0]
   cacheRoute = [0,0,0,0]
-
   _mainLoopRunning = 0
+  enrolled = False
   
   def __init__(self, TxDataQ, RxDataQ):
     threading.Thread.__init__(self)
-    self.TxDataQ = TxDataQ
-    self.RxDataQ = RxDataQ
+    self.CommTxQ = TxDataQ
+    self.CommRxQ = RxDataQ
      
   def enroll(self):
     print("enrolling")
-    udpTx = socket.socket(
-
+    udp = somnUDP.somnUDPThread(stuff)
+    udp.start()
+    self.TCPRxQ.get(timeout = 30)
+      
+    
   def run(self):
     socket.setdefaulttimeout(5)
     networkAlive = threading.Event()
     networkAlive.set()
-    Rx = somnTCP.startSomnRx(networkAlive, self.RxQ)
-    Tx = somnTCP.startSomnTx(networkAlive, self.TxQ)
+    Rx = somnTCP.startSomnRx(networkAlive, self.TCPRxQ)
+    Tx = somnTCP.startSomnTx(networkAlive, self.TCPTxQ)
     self.enroll()
     
     #start main loop to handle incoming queueus
