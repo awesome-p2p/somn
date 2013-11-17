@@ -7,6 +7,7 @@ import queue
 import sys
 import struct
 import time
+import somnPkt
 
 class RxThread(threading.Thread):
   def __init__(self, ip, port, RxQ, RxAlive):
@@ -71,7 +72,9 @@ class RxThread(threading.Thread):
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-          self.RxQ.put(pktRx)
+          packet = somnPacket()
+          packet.decode(pktRx)
+          self.RxQ.put(packet)
         con.close()
 
     if skt is not None:  
@@ -91,16 +94,17 @@ class TxThread(threading.Thread):
   def run(self):
     while self.TxAlive.is_set():  
       try:  # check for available outgoing packets
-        pkt = self.TxQ.get(False)
+        packet = self.TxQ.get(False)
       except queue.Empty:
         pass
       else: # send packet to desired peer
+        pktTx = packet.packet.toBytes()
         if LOOPBACK_MODE:
           IP = SOMN_LOOPBACK_IP
           PORT = SOMN_LOOPBACK_PORT
         else:
-          IP = pkt.getIP()
-          PORT = pkt.getPort()
+          IP = packet.ip
+          PORT = packet.port
         try:  # attempt to create a socket, break on failure
           skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         except socket.error as msg:
