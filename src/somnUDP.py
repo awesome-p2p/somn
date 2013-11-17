@@ -31,6 +31,7 @@ class somnUDPThread(threading.Thread):
       #packet.Decode(data)
       self.RxQ.put(data)
     udpSkt.close()
+
 if __name__=="__main__":
   socket.setdefaulttimeout(5)
   rxdq = queue.Queue()
