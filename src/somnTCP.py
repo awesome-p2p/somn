@@ -5,10 +5,8 @@ import threading
 from somnConst import *
 import queue
 import sys
-
-#LOOPBACK_MODE = 0
-#SOMN_LOOPBACK_IP = "127.0.0.1"
-#SOMN_LOOPBACK_PORT = 45000
+import struct
+import time
 
 class RxThread(threading.Thread):
   def __init__(self, ip, port, RxQ, RxAlive):
@@ -30,8 +28,10 @@ class RxThread(threading.Thread):
       skt.bind((self.ip, self.port))
     except socket.error as msg:
       print("Rx bind failed")
+      print(msg)
       self.RxAlive.clear()
-
+ 
+    print("Rx Thread Bound")
     while (self.RxAlive.is_set() and  (skt != None)):      
       try:  # listen for incoming packets
         skt.listen(1)
@@ -41,36 +41,36 @@ class RxThread(threading.Thread):
         self.RxAlive.clear()
         print("Rx Listen failed") 
         break 
-
+      print("Rx Thread listening")
       try:  # accept connections
         con, sourceNodeIp = skt.accept()
       except socket.timeout:
+        con.close()
         pass
       else: # read all data from socket, push onto the queue
         pktRx = b''
         if LOOPBACK_MODE:
-          MSGLEN = 10 # size of test message "Hello Somn"
+          MSGLEN = 4# size of test message "Hello Somn"
         else:
           MSGLEN = 4
           while len(pktRx) < MSGLEN:
             chunk = con.rev(MSGLEN - len(pktRx))
             if chunk == b'': break
             pktRx = pktRx + chunk
-          pktFlag = pktRx & 0x3
-          # TODO: figure out correct msglen multipliers
+          pktFlag = (struct.unpack('!I',pktRx)[0] & (3 << 30)) >> 30
+          # Determine incoming packet lengt from packet type flag
           if pktFlag == 0:
-            MSGLEN = 4 * 4
+            MSGLEN = (SOMN_MSG_PKT_SIZE - WORD_SIZE)
           elif pktFlag == 1:
-            MSGLEN = 4 * 3
+            MSGLEN = (SOMN_MESH_PKT_SIZE - WORD_SIZE)
           elif pktFlag == 2:
-            MSGLEN = 4 * 12
+            MSGLEN = (SOMN_ROUTE_PKT_SIZE - WORD_SIZE)
           elif pktFlag == 3:
-            MSGLEN = 4 * 1
+            MSGLEN = 0	# No packets use this flag currently
         while len(pktRx) < MSGLEN:
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-          #print(chunk)
           self.RxQ.put(pktRx)
         con.close()
 
@@ -158,12 +158,14 @@ def lbTest():
   networkAlive = threading.Event()
   networkAlive.set()
   Rx = startSomnRx(networkAlive, RxQ)
+  time.sleep(2)
   Tx = startSomnTx(networkAlive, TxQ) 
-  testPkt = "Hello SOMN".encode("utf-8")
+  testPkt = struct.pack('!I', 3229877312)
   TxQ.put(testPkt)
-  echoPkt = RxQ.get()    
-  print(echoPkt)
+  echoPkt = RxQ.get(timeout = 10)    
   RxQ.task_done() 
   networkAlive.clear()
   Tx.join()
   Rx.join()
+  pkt = struct.unpack('!I', echoPkt)
+  print((pkt[0] & (3 << 30)) >> 30)
