@@ -44,19 +44,70 @@ class SomnPacket:
             self.PacketFields['SourceID'] = 0
             self.PacketFields['DestID'] = 0
             self.PacketFields['LastNodeID'] = 0
-            self.PacketFields['RouteRequestCode'] = 0
             self.PacketFields['HTL'] = 0
             self.PacketFields['ReturnRoute'] = 0
+        elif packetType == SomnPacketType.BadRoute:
+            self.PacketFields['Route'] = 0
+            self.PacketFields['Flags'] = 0x2
+            self.PacketFields['SourceID'] = 0
+            self.PacketFields['DestID'] = 0
+        elif (packetType == SomnPacketType.AddConnection
+          or packetType == SomnPacketType.DropConnection
+          or packetType == SomnPacketType.NodeEnrollment):
+            self.PacketFields['Route'] = 0
+            self.PacketFields['Flags'] = 0x1
+            self.PacketFields['ReqNodeID'] = 0
+            self.PacketFields['RespNodeID'] = 0
+            self.PacketFields['ReqNodePort'] = 0
+            self.PacketFields['RespNodePort'] = 0
+            self.PacketFields['ReqNodeIP'] = 0
+            self.PacketFields['RespNodeIP'] = 0
+            self.PacketFields['AckSeq'] = 0
         else:
-            print("Not a message")
+            print("Bad packet type!")
 
 
     def ToBytes(self):
         if self.PacketType == SomnPacketType.Message:
             word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
-            word2 = (self.PacketFields['DestID'] << 16) | self.PacketFields['SourceID']
+            word2 = (self.PacketFields['DestID'] << 16) | (self.PacketFields['SourceID'] & 0xFFFF)
             message = bytes(4*16)
             return struct.pack('!IIxxxx64s', word1, word2,message)
+        
+        elif self.PacketType == SomnPacketType.RouteRequest:
+            word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
+            word2 = (self.PacketFields['DestID'] << 16) | (self.PacketFields['SourceID'] & 0xFFFF)
+            word3 = (self.PacketFields['RouteRequestCode'] << 16) | (self.PacketFields['LastNodeID'] & 0xFFFF)
+            word4 = self.PacketFields['ReturnRoute']
+            return struct.pack('!IIII', word1, word2, word3, word4)
+
+        elif self.PacketType == SomnPacketType.BadRoute:
+            word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
+            word2 = (self.PacketFields['DestID'] << 16) | (self.PacketFields['SourceID'] & 0xFFFF)
+            word3 = (self.PacketFields['RouteRequestCode'] << 16)
+            return struct.pack('!IIIxxxx', word1, word2, word3)
+        elif (self.PacketType == SomnPacketType.AddConnection 
+          or self.PacketType == SomnPacketType.DropConnection
+          or self.PacketType == SomnPacketType.NodeEnrollment):
+                word2 = (self.PacketFields['RespNodeID'] << 16) | (self.PacketFields['ReqNodeID'] & 0xFFFF)
+                word3 = (self.PacketFields['RespNodePort'] << 16) | (self.PacketFields['ReqNodePort'] & 0xFFFF)
+                word4 = self.PacketFields['ReqNodeIP']
+                word5 = self.PacketFields['RespNodeIP']
+
+                #packet types differ in first and last words
+                if self.PacketType == SomnPacketType.AddConnection:
+
+                    word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
+                    word6 = (1 << 16) | (self.PacketFields['AckSeq'] & 0xFFFF)
+                elif self.PacketType == SomnPacketType.DropConnection:
+                    word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
+                    word6 = (2 << 16) | (self.PacketFields['AckSeq'] & 0xFFFF)
+                elif self.PacketType == SomnPacketType.DropConnection:
+                    word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000)
+                    word6 = (3 << 16) | (self.PacketFields['AckSeq'] & 0xFFFF)
+                return struct.pack('!IIIIII', word1, word2, word3, word4, word5, word6)
+        else:
+            print("Error, unknown packet type")
 
 
     def Decode(self, rawData):
@@ -70,7 +121,7 @@ class SomnPacket:
             self.PacketFields['DestID'] = decoded[1] >> 16
             self.PacketFields['SourceID'] = decoded[1] & 0xFFFF 
         #length 16 is mesh routing packet
-        elif len(rawData == 16):
+        elif len(rawData) == 16:
             decoded = struct.unpack('!IIII', rawData)
 
             self.PacketFields['Route'] = decoded[0] & 0x3FFFFFFF
@@ -91,7 +142,7 @@ class SomnPacket:
                 self.PacketType = SomnPacketType.BadRoute
 
         #length 24 is mesh network packet
-        elif len(rawData == 24):
+        elif len(rawData) == 24:
             decoded = struct.unpack('!IIIIII', rawData)
 
             #note that enrollment packet field names req = enrolling
@@ -122,22 +173,43 @@ class SomnPacket:
 
     
 if __name__ == "__main__":
-    p1 = SomnPacket()
-    p1.InitEmpty(SomnPacketType.Message)
+    #p1 = SomnPacket()
+    #p1.InitEmpty(SomnPacketType.Message)
+#
+    #p1.PacketFields['Route'] = 0xF0
+    #p1.PacketFields['Flags'] = 0x1
+    #p1.PacketFields['DestID'] = 0xFFFF
+    #p1.PacketFields['SourceID'] = 0xAAAA
 
-    p1.PacketFields['Route'] = 0xF0
-    p1.PacketFields['Flags'] = 0x1
-    p1.PacketFields['DestID'] = 0xFFFF
-    p1.PacketFields['SourceID'] = 0xAAAA
 
 
+    #print(p1.PacketFields)
+    #raw = p1.ToBytes()
+#
+    #print(len(raw))
+    #print(raw)
+    #p1.Decode(raw)
+    #print(p1.PacketFields)
 
-    print(p1.PacketFields)
-    raw = p1.ToBytes()
+    p2 = SomnPacket()
+    p2.InitEmpty(SomnPacketType.AddConnection)
+    print(p2.PacketFields)
 
-    print(len(raw))
+    p2.PacketFields['AckSeq'] = 0xA
+    p2.PacketFields['ReqNodeID'] = 0xFF
+    p2.PacketFields['RespNodeID'] = 0xAB
+    p2.PacketFields['ReqNodePort'] = 0xAA
+    p2.PacketFields['RespNodePort'] = 0x77
+    p2.PacketFields['ReqNodeIP'] = 0xF0
+    p2.PacketFields['RespNodeIP'] = 0x01
+
+    raw = p2.ToBytes()
     print(raw)
-    p1.Decode(raw)
-    print(p1.PacketFields)
+
+    p3 = SomnPacket()
+    p3.Decode(raw)
+    print(p2.PacketFields)
+    print(p3.PacketFields)
+
 
 
