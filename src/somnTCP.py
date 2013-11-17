@@ -26,13 +26,14 @@ class RxThread(threading.Thread):
       exit()
 
     try:  # bind to localhost ip/port
-      skt.bind((self.ip, self.port))
+      skt.bind((self.ip, 0))
     except socket.error as msg:
       print("Rx bind failed")
       print(msg)
       self.RxAlive.clear()
  
     print("Rx Thread Bound")
+    self.port = socket.getsockname()[1]
     while (self.RxAlive.is_set() and  (skt != None)):      
       try:  # listen for incoming packets
         skt.listen(1)
