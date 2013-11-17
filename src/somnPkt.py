@@ -13,6 +13,17 @@ class SomnPacketType():
     NodeEnrollment = "NodeEnrollment"
 
 
+class SomnPacketTxWrapper:
+    Packet = SomnPacket
+    TxAddress = ""
+    TxPort = 0
+
+    def __init__(self, packet, txaddr, txport):
+        self.Packet = packet
+        self.TxAddress = txaddr
+        self.TxPort = txport
+
+
 class SomnPacket:
     PacketType = SomnPacketType.Unknown
     PacketFields = {}
