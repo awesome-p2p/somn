@@ -14,6 +14,8 @@ class somnMesh(threading.Thread):
   routeTable = [(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)]
   cacheId = [0,0]
   cacheRoute = [0,0,0,0]
+
+  _mainLoopRunning = 0
   
   def __init__(self, TxDataQ, RxDataQ):
     threading.Thread.__init__(self)
@@ -31,10 +33,29 @@ class somnMesh(threading.Thread):
     Rx = somnTCP.startSomnRx(networkAlive, self.RxQ)
     Tx = somnTCP.startSomnTx(networkAlive, self.TxQ)
     self.enroll()
+    
+    #start main loop to handle incoming queueus
+    self._mainLoopRunning = 1
+    while self._mainLoopRunning:
+      self._handleTcpRx()
+      self._handleUdpRx()
+      self._handleTx()
+
     # Do a bunch of stuff
     networkAlive.clear()
     Rx.join()
     Tx.join()
+
+  def _handleTx():
+    pass
+ 
+  def _handleTcpRx():
+    pass
+
+  def _handleUdpRx():
+    pass
+
+
 
 if __name__ == "__main__":
   rxdq = queue.Queue()
