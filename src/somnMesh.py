@@ -26,10 +26,31 @@ class somnMesh(threading.Thread):
      
   def enroll(self):
     print("enrolling")
-    udp = somnUDP.somnUDPThread(stuff)
+    tcpRespTimeout = False
+    routeIndex = 0
+    ACK = self.nodeID ^ self.nodeIP
+    enrollPkt = somnPkt.SomnPacket()
+    enrollPkt.InitEmpty("NodeEnrollment")
+    enrollPkt.PacketFields['ReqNodeID'] = self.nodeID
+    enrollPkt.PacketFields['ReqNodeIP'] = self.nodeIP
+    enrollPkt.PacketFields['ReqNodePort'] = self.nodePort
+    enrollPkt.PacketFields['ACKSeq'] = ACK
+
+    udp = somnUDP.somnUDPThread(enrollPkt, self.UDPRxQ, self.networkAlive)
     udp.start()
-    self.TCPRxQ.get(timeout = 30)
-      
+    while routeIndex < 3 or not tcpRespTimeout:
+      try:
+        enrollResponse = self.TCPRxQ.get(timeout = 30)
+      except:
+        tcpRespTimeout = True
+        break
+      if enrollResponse.PacketType == "EnrollResponse" and enrollResponse.PacketFields['ACKSeq'] == ACK:
+        routeTable[routeIndex] = (enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
+        routeIndex = routeIndex + 1
+        # encapsulate enrollResponse 
+        self.TCPTxQ.put(packedEnrollResponse)
+        enrolled = True
+    return udp  
     
   def run(self):
     socket.setdefaulttimeout(5)
@@ -37,8 +58,11 @@ class somnMesh(threading.Thread):
     networkAlive.set()
     Rx = somnTCP.startSomnRx(networkAlive, self.TCPRxQ)
     Tx = somnTCP.startSomnTx(networkAlive, self.TCPTxQ)
-    self.enroll()
-    
+    while not enrolled:
+      self.enroll()
+      if not enrolled:
+        # then we are on our own network
+        # somehow....god I am tired.
     #start main loop to handle incoming queueus
     self._mainLoopRunning = 1
     while self._mainLoopRunning:
