@@ -27,9 +27,9 @@ class somnUDPThread(threading.Thread):
         data, addr = udpSkt.recvfrom(24)  
       except socket.error:
         break
-      packet = somnPkt.somnPacket()
-      packet.decode(data)
-      self.RxQ.put(packet)
+      #packet = somnPkt.SomnPacket()
+      #packet.Decode(data)
+      self.RxQ.put(data)
     udpSkt.close()
 if __name__=="__main__":
   socket.setdefaulttimeout(5)
