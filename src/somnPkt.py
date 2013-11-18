@@ -22,6 +22,9 @@ class SomnPacket:
     _rawData = ""
     _initialized = False
 
+    def __init__(self, rawData = 0):
+        if rawData != 0:
+            self.Decode(rawData)
 
 
     def InitEmpty(self, packetType):
