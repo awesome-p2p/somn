@@ -33,7 +33,7 @@ class RxThread(threading.Thread):
       self.RxAlive.clear()
  
     print("Rx Thread Bound")
-    self.port = socket.getsockname()[1]
+    self.port = skt.getsockname()[1]
     while (self.RxAlive.is_set() and  (skt != None)):      
       try:  # listen for incoming packets
         skt.listen(1)
@@ -47,7 +47,7 @@ class RxThread(threading.Thread):
       try:  # accept connections
         con, sourceNodeIp = skt.accept()
       except socket.timeout:
-        con.close()
+        print("Rx Thread looping")
         pass
       else: # read all data from socket, push onto the queue
         pktRx = b''

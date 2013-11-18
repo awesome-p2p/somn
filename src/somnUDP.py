@@ -6,11 +6,12 @@ import time
 import somnPkt
 
 class somnUDPThread(threading.Thread):
-  def __init__(self, enrollPkt, RxQ, networkAlive):
+  def __init__(self, enrollPkt, RxQ, networkAlive, UDPAlive):
     threading.Thread.__init__(self)
     self.enrollPkt = enrollPkt
     self.RxQ = RxQ
     self.networkAlive = networkAlive
+    self.UDPAlive = UDPAlive
   def run(self):
     udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
@@ -22,14 +23,16 @@ class somnUDPThread(threading.Thread):
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
     udpSkt.bind(('', 45000))
-    while self.networkAlive.is_set():
+    while self.networkAlive.is_set() and self.UDPAlive.is_set():
       try:
         data, addr = udpSkt.recvfrom(24)  
-      except socket.error:
-        break
+      except socket.timeout:
+        print("udp looping")
+        pass
       #packet = somnPkt.SomnPacket()
       #packet.Decode(data)
-      self.RxQ.put(data)
+      else:
+        self.RxQ.put(data)
     udpSkt.close()
 
 if __name__=="__main__":
