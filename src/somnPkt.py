@@ -94,7 +94,6 @@ class SomnPacket:
         elif (self.PacketType == SomnPacketType.AddConnection 
           or self.PacketType == SomnPacketType.DropConnection
           or self.PacketType == SomnPacketType.NodeEnrollment):
-                word1 = ((self.PacketFields['Flags'] << 30))
                 word2 = (self.PacketFields['RespNodeID'] << 16) | (self.PacketFields['ReqNodeID'] & 0xFFFF)
                 word3 = (self.PacketFields['RespNodePort'] << 16) | (self.PacketFields['ReqNodePort'] & 0xFFFF)
                 word4 = self.PacketFields['ReqNodeIP']
@@ -108,7 +107,7 @@ class SomnPacket:
                 elif self.PacketType == SomnPacketType.DropConnection:
                     word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
                     word6 = (2 << 16) | (self.PacketFields['AckSeq'] & 0xFFFF)
-                elif self.PacketType == SomnPacketType.DropConnection:
+                elif self.PacketType == SomnPacketType.NodeEnrollment:
                     word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000)
                     word6 = (3 << 16) | (self.PacketFields['AckSeq'] & 0xFFFF)
                 return struct.pack('!IIIIII', word1, word2, word3, word4, word5, word6)
