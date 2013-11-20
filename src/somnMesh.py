@@ -17,7 +17,7 @@ class somnMesh(threading.Thread):
   UDPAlive = threading.Event()
   networkAlive = threading.Event()
   routeTable = [(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)]
-  cacheId = [0,0]
+  cacheId = [0,0,0,0]
   cacheRoute = [0,0,0,0]
   _mainLoopRunning = 0
   enrolled = False
@@ -103,9 +103,30 @@ class somnMesh(threading.Thread):
     UDP.join()
     Rx.join()
     Tx.join()
+
   def _handleTx(self):
     print("Handle TX")
-    pass
+    
+    try:
+      TxPkt = self.TxQ.get(False)
+    except:
+      return
+
+
+    route = 0
+    destId = TxPkt.PacketFields['DestID']
+    #check cache for route to dest ID
+    if destId in cacheId:
+      route = cacheRoute[cacheId.index(destId)]
+    else:
+      route = self._getRoute(destId)
+    
+    #pop first step in route from route string
+
+    #set route string in packet
+    TxPkt.PacketFields['Route'] = route
+
+    
  
   def _handleTcpRx(self):
     print("Handle RX")
@@ -131,6 +152,19 @@ class somnMesh(threading.Thread):
       self.TCPTxQ.put(packedEnrollResponse) 
     else:
       self.lastEnrollRequest = enrollRequest.PacketFields['ReqNodeID']
+
+
+  def _getRoute(self, destId):
+    pass
+
+  def _popRoute(self, route):
+    firstStep = route & 0x7
+    newRoute = route >> 3
+    return (firstStep, newRoute)
+
+  def _pushRoute(self, route, nextStep):
+    newRoute = (route << 3) | (nextStep & 0x7)
+    return newRoute
 
 if __name__ == "__main__":
   rxdq = queue.Queue()
