@@ -34,7 +34,19 @@ class somnRoutingTable:
     return _nodeTable[index - 1]
 
   def getNodeIndexFromId(self, nodeId):
-    pass
+    for i in range(0,5):
+      if self._nodeTable[i] != None:
+        if self._nodeTable[i].nodeID == nodeId:
+          return i
+    #if id not found, return -1
+    return -1
 
   def getNodeCount(self):
     return _nodeCount
+
+  def getAvailRouteCount(self):
+    return 5 - _nodeCount
+
+  def clearTable(self):
+    _nodeCount = 0
+    _nodeTable = [None, None, None, None, None]

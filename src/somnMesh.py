@@ -4,6 +4,7 @@ import somnTCP
 import somnUDP
 import somnPkt
 import somnConst
+import somnRouteTable
 import struct
 import queue
 import threading
@@ -16,7 +17,7 @@ class somnMesh(threading.Thread):
   UDPRxQ = queue.Queue()
   UDPAlive = threading.Event()
   networkAlive = threading.Event()
-  routeTable = [(0,"",0),(0,"",0),(0,"",0),(0,"",0),(0,"",0)]
+  routeTable = somnRouteTable.somnRoutingTable()
   cacheId = [0,0,0,0]
   cacheRoute = [0,0,0,0]
   _mainLoopRunning = 0
@@ -49,7 +50,6 @@ class somnMesh(threading.Thread):
   def enroll(self):
     print("enrolling")
     tcpRespTimeout = False
-    routeIndex = 0
     ACK = 56
     enrollPkt = somnPkt.SomnPacket()
     enrollPkt.InitEmpty("NodeEnrollment")
@@ -71,12 +71,10 @@ class somnMesh(threading.Thread):
       else:
         enrollResponse = somnPkt.SomnPacket(enrollPkt)
         if enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['ACKSeq'] == ACK:
-          routeTable[routeIndex] = (enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
-          routeIndex = routeIndex + 1
+          routeTable.addNode(enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
           packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollResponse, enrollResponse.PacketFields['RespNodeIP'], enrollResponse.Packetfields['RespNodePort']) 
           self.TCPTxQ.put(packedEnrollResponse)
           enrolled = True
-          availRouteCount = availRouteCount - 1
           print("Enrolled complete")
     return udp  
   
@@ -160,7 +158,7 @@ class somnMesh(threading.Thread):
     except:
       return
     enrollRequest = somnPkt.SomnPacket(enrollPkt)
-    if self.availRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.availRouteCount > 0):
+    if routeTable.getAvailRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and routeTable.getAvailRouteCount > 0):
       print(enrollRequest)
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
       enrollRequest.PacketFields['RespNodeIP'] = self.nodeIP
@@ -184,18 +182,7 @@ class somnMesh(threading.Thread):
     newRoute = (route << 3) | (nextStep & 0x7)
     return newRoute
 
-  #Get address for a node in the route table from the node's ID
-  def _getAddrFromRouteTable(self, nodeId):
-    for node in self.routeTable:
-      if node[0] == nodeId:
-       return node
-    return None
   
-  #Get address for a node in the route table from route index number
-  # note that in the route string 0s are treated as "none" so we start
-  # indexing at 1
-  def _getAddrFromRouteTableByIndex(self, index):
-    return self.routeTable[index - 1]
 
 if __name__ == "__main__":
   rxdq = queue.Queue()
