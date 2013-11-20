@@ -73,8 +73,7 @@ class RxThread(threading.Thread):
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-          packet = somnPacket()
-          packet.decode(pktRx)
+          packet = somnPacket(pktRx)
           self.RxQ.put(packet)
         con.close()
 
@@ -99,13 +98,13 @@ class TxThread(threading.Thread):
       except queue.Empty:
         pass
       else: # send packet to desired peer
-        pktTx = packet.packet.toBytes()
+        pktTx = packet.Packet.ToBytes()
         if LOOPBACK_MODE:
           IP = SOMN_LOOPBACK_IP
           PORT = SOMN_LOOPBACK_PORT
         else:
-          IP = packet.ip
-          PORT = packet.port
+          IP = packet.TxAddress
+          PORT = packet.TxPort
         try:  # attempt to create a socket, break on failure
           skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         except socket.error as msg:
@@ -122,8 +121,8 @@ class TxThread(threading.Thread):
           MSGLEN = len(pkt)
           TxData = pkt
         else:
-          MSGLEN = pkt.len
-          TxData = pkt.datagram
+          MSGLEN = len(pktTx)
+          TxData = pktTx
         while  totalsent < MSGLEN:
           sent = skt.send(TxData)
           if sent == 0:
@@ -137,13 +136,10 @@ class TxThread(threading.Thread):
 
 
 # Rx thread helper start function     
-def startSomnRx(RxAlive, RxQ):
+def startSomnRx(localhostIp, localhostPort, RxAlive, RxQ):
   if LOOPBACK_MODE:
     localhostIp = SOMN_LOOPBACK_IP
     localhostPort = SOMN_LOOPBACK_PORT
-  else:
-    localhostIp = getLocalHostIp() #netifaces.ifaddresses('eth0')[netifaces.AF_INET[0]['addr']]
-    localhostPort = somnConst.DEFAULT_PORT
   somnRx = RxThread(localhostIp, localhostPort, RxQ, RxAlive)
   somnRx.start()
   return somnRx

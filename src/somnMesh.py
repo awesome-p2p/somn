@@ -3,7 +3,7 @@
 import somnTCP
 import somnUDP
 import somnPkt
-import somnConst
+from somnConst import *
 import struct
 import queue
 import threading
@@ -27,17 +27,6 @@ class somnMesh(threading.Thread):
   lastEnrollReq = 0
   availRouteCount = 5
   
-  def IP2Int(self, IP):
-    o = list(map(int, IP.split('.')))
-    res = (16777216 * o[0]) + (65536 * o[1]) + (256 * o[2]) + o[3]
-    return res
-
-  def Int2IP(self,Int ):
-    o1 = int(Int / 16777216) % 256
-    o2 = int(Int / 65536) % 256
-    o3 = int(Int / 256) % 256
-    o4 = int(Int) % 256
-    return '%(o1)s.%(o2)s.%(o3)s.%(o4)s' % locals()
 
   def __init__(self, TxDataQ, RxDataQ):
     threading.Thread.__init__(self)
@@ -54,7 +43,7 @@ class somnMesh(threading.Thread):
     enrollPkt = somnPkt.SomnPacket()
     enrollPkt.InitEmpty("NodeEnrollment")
     enrollPkt.PacketFields['ReqNodeID'] = self.nodeID
-    enrollPkt.PacketFields['ReqNodeIP'] = self.IP2Int(self.nodeIP)
+    enrollPkt.PacketFields['ReqNodeIP'] = IP2Int(self.nodeIP)
     enrollPkt.PacketFields['ReqNodePort'] = self.nodePort
     enrollPkt.PacketFields['ACKSeq'] = ACK
 
@@ -84,7 +73,7 @@ class somnMesh(threading.Thread):
   def run(self):
     socket.setdefaulttimeout(5)
     self.networkAlive.set()
-    Rx = somnTCP.startSomnRx(self.networkAlive, self.TCPRxQ)
+    Rx = somnTCP.startSomnRx(self.nodeIP, self.nodePort, self.networkAlive, self.TCPRxQ)
     Tx = somnTCP.startSomnTx(self.networkAlive, self.TCPTxQ)
     enrollAttempts = 0
     while not self.enrolled and enrollAttempts < 3:
@@ -117,7 +106,7 @@ class somnMesh(threading.Thread):
     Tx.join()
 
   def _handleTx(self):
-    print("Handle TX")
+    #print("Handle TX")
     
     try:
       TxPkt = self.TxQ.get(False)
@@ -147,14 +136,14 @@ class somnMesh(threading.Thread):
     
  
   def _handleTcpRx(self):
-    print("Handle RX")
+    #print("Handle RX")
     try:
       RxPkt = self.TCPRxQ.get(False)
     except:
       pass
     
   def _handleUdpRx(self):
-    print("handleUDP")
+    #print("handleUDP")
     try:
       enrollPkt = self.UDPRxQ.get(False)
     except:
@@ -163,11 +152,12 @@ class somnMesh(threading.Thread):
     if self.availRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.availRouteCount > 0):
       print(enrollRequest)
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
-      enrollRequest.PacketFields['RespNodeIP'] = self.nodeIP
+      enrollRequest.PacketFields['RespNodeIP'] = IP2Int(self.nodeIP)
       enrollRequest.PacketFields['RespNodePort'] = self.nodePort
-      packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollRequest, enrollRequest.PacketFields['ReqNodeIP'], enrollRequest.PacketFields['ReqNodePort']) 
+      packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollRequest, Int2IP(enrollRequest.PacketFields['ReqNodeIP']), enrollRequest.PacketFields['ReqNodePort']) 
       self.lastEnrollRequest = enrollRequest.PacketFields['ReqNodeID']
-      self.TCPTxQ.put(packedEnrollResponse) 
+      self.TCPTxQ.put(packedEnrollResponse)
+      print("Enrolled a new Node")
     else:
       self.lastEnrollRequest = enrollRequest.PacketFields['ReqNodeID']
 
