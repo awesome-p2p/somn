@@ -4,7 +4,7 @@ import somnTCP
 import somnUDP
 import somnPkt
 import somnRouteTable
-from somnConst import *
+from somnLib import *
 import struct
 import queue
 import threading
@@ -148,8 +148,8 @@ class somnMesh(threading.Thread):
     except:
       return
     enrollRequest = somnPkt.SomnPacket(enrollPkt)
-    if routeTable.getAvailRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and routeTable.getAvailRouteCount > 0):
-      print(enrollRequest)
+    if self.availRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.availRouteCount > 0):
+      print(enrollRequest.ToBytes())
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
       enrollRequest.PacketFields['RespNodeIP'] = IP2Int(self.nodeIP)
       enrollRequest.PacketFields['RespNodePort'] = self.nodePort

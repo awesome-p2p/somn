@@ -2,7 +2,7 @@
 
 import socket
 import threading
-from somnConst import *
+from somnLib import *
 import queue
 import sys
 import struct
@@ -114,7 +114,9 @@ class TxThread(threading.Thread):
           skt.connect((IP, PORT))
         except socket.error:
           # this should generate a bad route event
-          break
+          print("bad Route")
+          print(pktTx.PacketFields)
+          continue
         # hack for socket test
         totalsent = 0
         if LOOPBACK_MODE:
