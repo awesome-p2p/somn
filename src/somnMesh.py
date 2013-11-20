@@ -128,7 +128,7 @@ class somnMesh(threading.Thread):
     TxPkt.PacketFields['Route'] = newRoute[1]
 
     #create wrapper packet to send to next step in route
-    nextHopAddr = self._getAddrFromRouteTableByIndex(nextRouteStep)
+    nextHopAddr = self.routeTable.getNodeInfoByIndex(nextRouteStep)
 
     txPktWrapper = SomnPktTxWrapper(TxPkt, nextHopAddr[1], nextHopAddr[2])
     
