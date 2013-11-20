@@ -22,16 +22,29 @@ class somnMesh(threading.Thread):
   _mainLoopRunning = 0
   enrolled = False
   nodeID = 0
-  nodeIP = "0.0.0.0"
+  nodeIP = "127.0.0.1"
   nodePort = 0
   lastEnrollReq = 0
   availRouteCount = 5
+  
+  def IP2Int(self, IP):
+    o = list(map(int, IP.split('.')))
+    res = (16777216 * o[0]) + (65536 * o[1]) + (256 * o[2]) + o[3]
+    return res
+
+  def Int2IP(self,Int ):
+    o1 = int(Int / 16777216) % 256
+    o2 = int(Int / 65536) % 256
+    o3 = int(Int / 256) % 256
+    o4 = int(Int) % 256
+    return '%(o1)s.%(o2)s.%(o3)s.%(o4)s' % locals()
 
   def __init__(self, TxDataQ, RxDataQ):
     threading.Thread.__init__(self)
     self.CommTxQ = TxDataQ
     self.CommRxQ = RxDataQ
     self.nodeID = 1
+    
      
   def enroll(self):
     print("enrolling")
@@ -41,7 +54,7 @@ class somnMesh(threading.Thread):
     enrollPkt = somnPkt.SomnPacket()
     enrollPkt.InitEmpty("NodeEnrollment")
     enrollPkt.PacketFields['ReqNodeID'] = self.nodeID
-    enrollPkt.PacketFields['ReqNodeIP'] = self.nodeIP
+    enrollPkt.PacketFields['ReqNodeIP'] = self.IP2Int(self.nodeIP)
     enrollPkt.PacketFields['ReqNodePort'] = self.nodePort
     enrollPkt.PacketFields['ACKSeq'] = ACK
 
@@ -56,8 +69,7 @@ class somnMesh(threading.Thread):
         print("Enroll failed")
         break 
       else:
-        enrollResponse = somnPkt.SomnPacket()
-        enrollResponse.Decode(enrollPkt)
+        enrollResponse = somnPkt.SomnPacket(enrollPkt)
         if enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['ACKSeq'] == ACK:
           routeTable[routeIndex] = (enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
           routeIndex = routeIndex + 1
@@ -117,16 +129,16 @@ class somnMesh(threading.Thread):
   def _handleUdpRx(self):
     print("handleUDP")
     try:
-      enrollRequest = self.UDPRxQ.get(False)
+      enrollPkt = self.UDPRxQ.get(False)
     except:
       return
-    
+    enrollRequest = somnPkt.SomnPacket(enrollPkt)
     if self.availRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.availRouteCount > 0):
       print(enrollRequest)
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
       enrollRequest.PacketFields['RespNodeIP'] = self.nodeIP
       enrollRequest.PacketFields['RespNodePort'] = self.nodePort
-      packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollRequest, enrollResponse.PacketFields['ReqNodeIP'], enrollResponse.Packetfields['ReqNodePort']) 
+      packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollRequest, enrollRequest.PacketFields['ReqNodeIP'], enrollRequest.PacketFields['ReqNodePort']) 
       self.lastEnrollRequest = enrollRequest.PacketFields['ReqNodeID']
       self.TCPTxQ.put(packedEnrollResponse) 
     else:
