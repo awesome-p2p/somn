@@ -16,7 +16,7 @@ class somnUDPThread(threading.Thread):
     udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
-    udpSkt.sendto("Hello There".encode("utf-8"), ('<broadcast>', 45000))
+    udpSkt.sendto(self.enrollPkt.ToBytes(), ('<broadcast>', 45000))
     udpSkt.close()
 
     udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

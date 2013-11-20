@@ -50,12 +50,14 @@ class somnMesh(threading.Thread):
     while routeIndex < 3 or not tcpRespTimeout:
       print("Enroll Attempt Loop")
       try:
-        enrollResponse = self.TCPRxQ.get(timeout = 5)
+        enrollPkt = self.TCPRxQ.get(timeout = 5)
       except queue.Empty:
         tcpRespTimeout = True
         print("Enroll failed")
         break 
-      else: 
+      else:
+        enrollResponse = somnPkt.SomnPacket()
+        enrollResponse.Decode(enrollPkt)
         if enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['ACKSeq'] == ACK:
           routeTable[routeIndex] = (enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
           routeIndex = routeIndex + 1
