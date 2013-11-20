@@ -16,7 +16,7 @@ class somnMesh(threading.Thread):
   UDPRxQ = queue.Queue()
   UDPAlive = threading.Event()
   networkAlive = threading.Event()
-  routeTable = [(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)]
+  routeTable = [(0,"",0),(0,"",0),(0,"",0),(0,"",0),(0,"",0)]
   cacheId = [0,0,0,0]
   cacheRoute = [0,0,0,0]
   _mainLoopRunning = 0
@@ -134,10 +134,16 @@ class somnMesh(threading.Thread):
       route = self._getRoute(destId)
     
     #pop first step in route from route string
+    newRoute = self._popRoute(route)
+    nextRouteStep = newRoute[0]
 
     #set route string in packet
-    TxPkt.PacketFields['Route'] = route
+    TxPkt.PacketFields['Route'] = newRoute[1]
 
+    #create wrapper packet to send to next step in route
+    nextHopAddr = self._getAddrFromRouteTableByIndex(nextRouteStep)
+
+    txPktWrapper = SomnPktTxWrapper(TxPkt, nextHopAddr[1], nextHopAddr[2])
     
  
   def _handleTcpRx(self):
@@ -177,6 +183,19 @@ class somnMesh(threading.Thread):
   def _pushRoute(self, route, nextStep):
     newRoute = (route << 3) | (nextStep & 0x7)
     return newRoute
+
+  #Get address for a node in the route table from the node's ID
+  def _getAddrFromRouteTable(self, nodeId):
+    for node in self.routeTable:
+      if node[0] == nodeId:
+       return node
+    return None
+  
+  #Get address for a node in the route table from route index number
+  # note that in the route string 0s are treated as "none" so we start
+  # indexing at 1
+  def _getAddrFromRouteTableByIndex(self, index):
+    return self.routeTable[index - 1]
 
 if __name__ == "__main__":
   rxdq = queue.Queue()
