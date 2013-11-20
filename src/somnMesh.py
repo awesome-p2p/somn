@@ -111,7 +111,6 @@ class somnMesh(threading.Thread):
     except:
       return
 
-
     route = 0
     destId = TxPkt.PacketFields['DestID']
     #check cache for route to dest ID
@@ -129,8 +128,10 @@ class somnMesh(threading.Thread):
 
     #create wrapper packet to send to next step in route
     nextHopAddr = self.routeTable.getNodeInfoByIndex(nextRouteStep)
-
     txPktWrapper = SomnPktTxWrapper(TxPkt, nextHopAddr[1], nextHopAddr[2])
+
+    #send packet to TX layer
+    self.TCPTxQ.put(txPktWrapper)
     
  
   def _handleTcpRx(self):
@@ -160,8 +161,16 @@ class somnMesh(threading.Thread):
       self.lastEnrollRequest = enrollRequest.PacketFields['ReqNodeID']
 
 
+  #get route from this node to dest node
   def _getRoute(self, destId):
-    pass
+    #first, check if the dest is a neighboring node
+    routeIndex = self.routeTable.getNodeIndexFromId(destId)
+    if routeIndex != -1:
+      return routeIndex & 0x7
+
+    #unknown route (discover from mesh)
+    return 0
+      
 
   def _popRoute(self, route):
     firstStep = route & 0x7
