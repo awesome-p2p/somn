@@ -94,6 +94,7 @@ class SomnPacket:
         elif (self.PacketType == SomnPacketType.AddConnection 
           or self.PacketType == SomnPacketType.DropConnection
           or self.PacketType == SomnPacketType.NodeEnrollment):
+                word1 = ((self.PacketFields['Flags'] << 30))
                 word2 = (self.PacketFields['RespNodeID'] << 16) | (self.PacketFields['ReqNodeID'] & 0xFFFF)
                 word3 = (self.PacketFields['RespNodePort'] << 16) | (self.PacketFields['ReqNodePort'] & 0xFFFF)
                 word4 = self.PacketFields['ReqNodeIP']
