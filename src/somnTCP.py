@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.2
 
 import socket
 import threading
@@ -16,6 +16,7 @@ class RxThread(threading.Thread):
     self.port = port
     self.RxQ = RxQ
     self.RxAlive = RxAlive
+    self.bound = 0
   def run(self):
     try:  # create a socket
       skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -34,6 +35,7 @@ class RxThread(threading.Thread):
  
     print("Rx Thread Bound")
     self.port = skt.getsockname()[1]
+    self.bound = 1
     while (self.RxAlive.is_set() and  (skt != None)):      
       try:  # listen for incoming packets
         skt.listen(1)
@@ -56,7 +58,7 @@ class RxThread(threading.Thread):
         else:
           MSGLEN = 4
           while len(pktRx) < MSGLEN:
-            chunk = con.rev(MSGLEN - len(pktRx))
+            chunk = con.recv(MSGLEN - len(pktRx))
             if chunk == b'': break
             pktRx = pktRx + chunk
           pktFlag = (struct.unpack('!I',pktRx)[0] & (3 << 30)) >> 30
@@ -73,7 +75,7 @@ class RxThread(threading.Thread):
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-          packet = somnPacket(pktRx)
+          packet = somnPkt.SomnPacket(pktRx)
           self.RxQ.put(packet)
         con.close()
 
@@ -91,7 +93,9 @@ class TxThread(threading.Thread):
     threading.Thread.__init__(self)
     self.TxQ = TxQ
     self.TxAlive = TxAlive
+    self.bound = 0
   def run(self):
+    self.bound = 1
     while self.TxAlive.is_set():  
       try:  # check for available outgoing packets
         packet = self.TxQ.get(False)
@@ -115,7 +119,7 @@ class TxThread(threading.Thread):
         except socket.error:
           # this should generate a bad route event
           print("bad Route")
-          print(pktTx.PacketFields)
+          print(packet.Packet.PacketFields)
           continue
         # hack for socket test
         totalsent = 0

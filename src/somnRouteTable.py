@@ -22,7 +22,7 @@ class somnRoutingTable:
     entry = somnRoutingTableEntry(nodeid, addr, port)
 
     for i in range(0,5):
-      if self._nodeTable[i] = None:
+      if self._nodeTable[i] == None:
         self._nodeTable[i] = entry
         _nodeCount += 1
         #route table is 1-indexed
@@ -42,11 +42,11 @@ class somnRoutingTable:
     return -1
 
   def getNodeCount(self):
-    return _nodeCount
+    return self._nodeCount
 
   def getAvailRouteCount(self):
-    return 5 - _nodeCount
+    return 5 - self._nodeCount
 
   def clearTable(self):
-    _nodeCount = 0
-    _nodeTable = [None, None, None, None, None]
+    self._nodeCount = 0
+    self._nodeTable = [None, None, None, None, None]

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.3
+#!/usr/bin/env python3.2
 
 import somnTCP
 import somnUDP
@@ -34,7 +34,6 @@ class somnMesh(threading.Thread):
     self.CommTxQ = TxDataQ
     self.CommRxQ = RxDataQ
     self.nodeID = 1
-    
      
   def enroll(self):
     print("enrolling")
@@ -49,16 +48,16 @@ class somnMesh(threading.Thread):
 
     udp = somnUDP.somnUDPThread(enrollPkt, self.UDPRxQ, self.networkAlive, self.UDPAlive)
     udp.start()
-    while routeIndex < 3 or not tcpRespTimeout:
+    while self.routeTable.getNodeCount() < 3 or not tcpRespTimeout:
       print("Enroll Attempt Loop")
       try:
-        enrollPkt = self.TCPRxQ.get(timeout = 5)
+        enrollResponse = self.TCPRxQ.get(timeout = 5)
       except queue.Empty:
         tcpRespTimeout = True
         print("Enroll failed")
         break 
       else:
-        enrollResponse = somnPkt.SomnPacket(enrollPkt)
+        #enrollResponse = somnPkt.SomnPacket(enrollPkt)
         if enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['ACKSeq'] == ACK:
           routeTable.addNode(enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
           packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollResponse, enrollResponse.PacketFields['RespNodeIP'], enrollResponse.Packetfields['RespNodePort']) 
@@ -73,6 +72,12 @@ class somnMesh(threading.Thread):
     self.networkAlive.set()
     Rx = somnTCP.startSomnRx(self.nodeIP, self.nodePort, self.networkAlive, self.TCPRxQ)
     Tx = somnTCP.startSomnTx(self.networkAlive, self.TCPTxQ)
+    _spinlock = 1
+    while _spinlock:
+      if Rx.bound and Tx.bound: _spinlock = 0
+    if self.nodePort == 0:
+      self.nodePort = Rx.port
+      print(self.nodePort)
     enrollAttempts = 0
     while not self.enrolled and enrollAttempts < 3:
       self.UDPAlive.set()
@@ -148,8 +153,8 @@ class somnMesh(threading.Thread):
     except:
       return
     enrollRequest = somnPkt.SomnPacket(enrollPkt)
-    if self.availRouteCount > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.availRouteCount > 0):
-      print(enrollRequest.ToBytes())
+    if self.routeTable.AvailRouteCount() > 1 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.availRouteCount > 0):
+      print(enrollRequest.PacketFields)
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
       enrollRequest.PacketFields['RespNodeIP'] = IP2Int(self.nodeIP)
       enrollRequest.PacketFields['RespNodePort'] = self.nodePort
