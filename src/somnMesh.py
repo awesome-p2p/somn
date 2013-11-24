@@ -51,17 +51,17 @@ class somnMesh(threading.Thread):
 
     udp = somnUDP.somnUDPThread(enrollPkt, self.UDPRxQ, self.networkAlive, self.UDPAlive)
     udp.start()
-    while self.routeTable.getNodeCount() < 3 or not tcpRespTimeout:
+    while not tcpRespTimeout and self.routeTable.getNodeCount() < 3: 
       try:
         enrollResponse = self.TCPRxQ.get(timeout = 1)
       except queue.Empty:
         tcpRespTimeout = True
         break 
       else:
-        print("-------- START ENROLL ----------")
-        print(enrollResponse.PacketFields)
-        print(enrollResponse.PacketType)
-        print("-------- END ENROLL ---------")
+       # print("-------- START ENROLL ----------")
+       # print(enrollResponse.PacketFields)
+       # print(enrollResponse.PacketType)
+       # print("-------- END ENROLL ---------")
         if enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['AckSeq'] == ACK:
           self.routeTable.addNode(enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
           
@@ -69,7 +69,7 @@ class somnMesh(threading.Thread):
           self.TCPTxQ.put(packedEnrollResponse)
           self.enrolled = True
           print("Enrolled complete")
-          break
+          #break
     return udp  
   
     
@@ -87,11 +87,10 @@ class somnMesh(threading.Thread):
    
     enrollAttempts = 0
     
-    while not self.enrolled:# and enrollAttempts < 3:
+    while not self.enrolled:
       self.UDPAlive.set()
       UDP = self.enroll()
       if self.enrolled: 
-        print("Enroll True")
         break
       elif enrollAttempts < 2:
         self.UDPAlive.clear()
@@ -99,9 +98,8 @@ class somnMesh(threading.Thread):
         enrollAttempts = enrollAttempts + 1
       else:
         self.enrolled = True
-        print("Setting up single node network")
+        print("Enrolled as Alhpa Node")
         break
-
     #start main loop to handle incoming queueus
     self._mainLoopRunning = 1
     testCount = 0
@@ -157,19 +155,21 @@ class somnMesh(threading.Thread):
       return
     #RxPkt = somnPkt.SomnPacket(rawPkt)
     pktType = RxPkt.PacketType
-    print("received packet")
     if pktType == somnPkt.SomnPacketType.NodeEnrollment:
       print("Enrollment Packet Received")
       # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
       if RxPkt.PacketFields['ReqNodeID'] == self.nodeID: return
       # We need to disable a timer, enroll the node, if timer has expired, do nothing
-      for pendingEnroll in self.connCache:
-        if (RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['AckSeq']) == pendingEnroll[1]:
+      for idx, pendingEnroll in enumerate(self.connCache):
+        print(pendingEnroll[0])
+        if (RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['AckSeq']) == pendingEnroll[0]:
             print("Enrollment ACKED")
             # disable timer
-            pendingEnroll[2].cancel()
+            pendingEnroll[1].cancel()
+            # clear connCache entry
+            self.connCache[idx] = (('',0),) 
             # add node
-            routeTable.addNode(enrollResponse.PacketFields['ReqNodeID'], enrollResponse.PacketFields['ReqNodeIP'], enrollResponse.PacketFields['ReqNodePort'])
+            self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['ReqNodeIP'], RxPkt.PacketFields['ReqNodePort'])
             break
 
     elif pktType == somnPkt.PacketType.Message:
@@ -218,25 +218,27 @@ class somnMesh(threading.Thread):
     except:
       return
     enrollRequest = somnPkt.SomnPacket(enrollPkt)
-    if self.routeTable.getAvailRouteCount() > 2 or (self.lastEnrollRequest == enrollRequest.PacketFields['ReqNodeID'] and self.routeTable.getAvailRouteCount() > 0):
+    if self.routeTable.getNodeIndexFromId(enrollRequest.PacketFields['ReqNodeID']) > 0: 
+      return
+    
+    if self.routeTable.getAvailRouteCount() > 2 or (self.lastEnrollReq == enrollRequest.PacketFields['ReqNodeID'] and self.routeTable.getAvailRouteCount() > 0):
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
       enrollRequest.PacketFields['RespNodeIP'] = IP2Int(self.nodeIP)
       enrollRequest.PacketFields['RespNodePort'] = self.nodePort
       packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollRequest, Int2IP(enrollRequest.PacketFields['ReqNodeIP']), enrollRequest.PacketFields['ReqNodePort']) 
       connCacheTag = (enrollRequest.PacketFields['ReqNodeID'], enrollRequest.PacketFields['AckSeq'])
-      TxTimer = threading.Timer(5, self._enrollTimeout, connCacheTag)
+      TxTimer = threading.Timer(10.0, self._enrollTimeout, connCacheTag)
       self.connCache[self.nextConnCacheIndex] = (connCacheTag, TxTimer)
       self.nextConnCacheIndex = self.nextConnCacheIndex + 1
       if self.nextConnCacheIndex >= len(self.connCache): self.nextConnCacheIndex = 0
       print("------- START UDP LISTEN -----------")
-      print(enrollRequest.PacketType)
-      print(enrollRequest.PacketFields)
+      print(self.routeTable.getAvailRouteCount())
+      print("Responded to Enroll Request")
       print("---------- END UDP LISTEN-----------")
       self.TCPTxQ.put(packedEnrollResponse)
       TxTimer.start()
-      print("Responded to Enroll Request")
     else:
-      self.lastEnrollRequest = enrollRequest.PacketFields['ReqNodeID']
+      self.lastEnrollReq = enrollRequest.PacketFields['ReqNodeID']
 
 
   #get route from this node to dest node
