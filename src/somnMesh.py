@@ -161,7 +161,7 @@ class somnMesh(threading.Thread):
       if RxPkt.PacketFields['ReqNodeID'] == self.nodeID: return
       # We need to disable a timer, enroll the node, if timer has expired, do nothing
       for idx, pendingEnroll in enumerate(self.connCache):
-        print(pendingEnroll[0])
+        #print(pendingEnroll[0])
         if (RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['AckSeq']) == pendingEnroll[0]:
             print("Enrollment ACKED")
             # disable timer
@@ -174,10 +174,22 @@ class somnMesh(threading.Thread):
 
     elif pktType == somnPkt.PacketType.Message:
       print("Message Packet Received")
-    
+      # Check if we are the dest node
+      if RxPkt.PacketFields['DestID'] == self.nodeID:
+        print(RxPkt.PacketFields['Message'])
+        # self.commRxQ.put(RxPkt) # TODO: strip headers before pushing onto queue
+      # otherwise, propagate the message along the route
+      else:
+        nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
+        TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(nextHop)) 
+        self.TCPTxQ.put(TxPkt)
     elif pktType == somnPkt.PacketType.RouteRequest:
       print("Route Req Packet Received")
-    
+      if RxPkt.PacketFields['DestId'] == self.nodeID:
+        # end of route request, return to sender
+      elif self.routeTable.getNodeIndexById(RxPkt.PacketFields['DestId'])
+      elif RxPkt.PacketFields['HTL'] > 0:
+        # 
     elif pktType == somnPkt.PacketType.BadRoute:
       print("Bad Route Packet Received")
     
