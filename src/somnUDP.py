@@ -27,7 +27,7 @@ class somnUDPThread(threading.Thread):
       try:
         data, addr = udpSkt.recvfrom(24)  
       except socket.timeout:
-        print("udp looping")
+        #print("udp looping")
         pass
       #packet = somnPkt.SomnPacket()
       #packet.Decode(data)

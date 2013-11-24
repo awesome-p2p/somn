@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.2
 
 import socket
 import threading
@@ -16,6 +16,7 @@ class RxThread(threading.Thread):
     self.port = port
     self.RxQ = RxQ
     self.RxAlive = RxAlive
+    self.bound = 0
   def run(self):
     try:  # create a socket
       skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -34,6 +35,7 @@ class RxThread(threading.Thread):
  
     print("Rx Thread Bound")
     self.port = skt.getsockname()[1]
+    self.bound = 1
     while (self.RxAlive.is_set() and  (skt != None)):      
       try:  # listen for incoming packets
         skt.listen(1)
@@ -43,11 +45,11 @@ class RxThread(threading.Thread):
         self.RxAlive.clear()
         print("Rx Listen failed") 
         break 
-      print("Rx Thread listening")
+      #print("Rx Thread listening")
       try:  # accept connections
         con, sourceNodeIp = skt.accept()
       except socket.timeout:
-        print("Rx Thread looping")
+        #print("Rx Thread looping")
         pass
       else: # read all data from socket, push onto the queue
         pktRx = b''
@@ -56,25 +58,30 @@ class RxThread(threading.Thread):
         else:
           MSGLEN = 4
           while len(pktRx) < MSGLEN:
-            chunk = con.rev(MSGLEN - len(pktRx))
+            chunk = con.recv(MSGLEN - len(pktRx))
             if chunk == b'': break
             pktRx = pktRx + chunk
           pktFlag = (struct.unpack('!I',pktRx)[0] & (3 << 30)) >> 30
+          print("---- START RX TH -----")
+          print(pktFlag)
           # Determine incoming packet lengt from packet type flag
           if pktFlag == 0:
-            MSGLEN = (SOMN_MSG_PKT_SIZE - WORD_SIZE)
+            MSGLEN = (SOMN_MSG_PKT_SIZE)#WORD_SIZE)
           elif pktFlag == 1:
-            MSGLEN = (SOMN_MESH_PKT_SIZE - WORD_SIZE)
+            MSGLEN = (SOMN_MESH_PKT_SIZE)
           elif pktFlag == 2:
-            MSGLEN = (SOMN_ROUTE_PKT_SIZE - WORD_SIZE)
+            MSGLEN = (SOMN_ROUTE_PKT_SIZE)#WORD_SIZE)
           elif pktFlag == 3:
             MSGLEN = 0	# No packets use this flag currently
         while len(pktRx) < MSGLEN:
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-          packet = somnPacket(pktRx)
-          self.RxQ.put(packet)
+        print(pktRx)
+        packet = somnPkt.SomnPacket(pktRx)
+        print(packet.PacketType)
+        print("----- END RX TH ----")
+        self.RxQ.put(packet)
         con.close()
 
     if skt is not None:  
@@ -91,14 +98,20 @@ class TxThread(threading.Thread):
     threading.Thread.__init__(self)
     self.TxQ = TxQ
     self.TxAlive = TxAlive
+    self.bound = 0
   def run(self):
+    self.bound = 1
     while self.TxAlive.is_set():  
       try:  # check for available outgoing packets
         packet = self.TxQ.get(False)
       except queue.Empty:
         pass
       else: # send packet to desired peer
+        print("---- START TX TH ------")
+        print(packet.Packet.PacketFields, packet.TxAddress, packet.TxPort, packet.Packet.PacketType)
         pktTx = packet.Packet.ToBytes()
+        print(pktTx)
+        print("---------- END TX TH ---------")
         if LOOPBACK_MODE:
           IP = SOMN_LOOPBACK_IP
           PORT = SOMN_LOOPBACK_PORT
@@ -108,6 +121,7 @@ class TxThread(threading.Thread):
         try:  # attempt to create a socket, break on failure
           skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         except socket.error as msg:
+          print(msg)
           self.TxAlive.clear()
           break
         try:  # attempt to connect to desired node, if fails, generate a bad route event
@@ -115,7 +129,7 @@ class TxThread(threading.Thread):
         except socket.error:
           # this should generate a bad route event
           print("bad Route")
-          print(pktTx.PacketFields)
+          print(packet.Packet.PacketFields)
           continue
         # hack for socket test
         totalsent = 0
@@ -131,7 +145,7 @@ class TxThread(threading.Thread):
             raise RuntimeError("Python 3 sockets are dumb")
           totalsent = totalsent + sent
         self.TxQ.task_done()
-        skt.shutdown(1)
+       # skt.shutdown(1)
         skt.close()
     
     print("Tx Thread shutting down")

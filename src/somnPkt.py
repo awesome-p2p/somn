@@ -149,7 +149,6 @@ class SomnPacket:
         #length 24 is mesh network packet
         elif len(rawData) == 24:
             decoded = struct.unpack('!IIIIII', rawData)
-
             #note that enrollment packet field names req = enrolling
             self.PacketFields['Route'] = decoded[0] & 0x3FFFFFFF
             self.PacketFields['Flags'] = decoded[0] >> 30 
@@ -160,7 +159,6 @@ class SomnPacket:
             self.PacketFields['ReqNodeIP'] = decoded[3]
             self.PacketFields['RespNodeIP'] = decoded[4]
             self.PacketFields['AckSeq'] = decoded[5] & 0xFFFF
-
             #distinguish between types of network packets
             code = (decoded[5] >> 16)
             #code = 1, add connection packet
