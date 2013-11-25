@@ -69,6 +69,7 @@ class somnMesh(threading.Thread):
           self.TCPTxQ.put(packedEnrollResponse)
           self.enrolled = True
           print("Enrolled to: ", enrollResponse.PacketFields['RespNodeID'])
+          self.TCPRxQ.task_done()
           #break
     return udp  
   
