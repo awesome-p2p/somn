@@ -62,8 +62,8 @@ class RxThread(threading.Thread):
             if chunk == b'': break
             pktRx = pktRx + chunk
           pktFlag = (struct.unpack('!I',pktRx)[0] & (3 << 30)) >> 30
-          print("---- START RX TH -----")
-          print(pktFlag)
+          #print("---- START RX TH -----")
+          #print(pktFlag)
           # Determine incoming packet lengt from packet type flag
           if pktFlag == 0:
             MSGLEN = (SOMN_MSG_PKT_SIZE)#WORD_SIZE)
@@ -77,10 +77,10 @@ class RxThread(threading.Thread):
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-        print(pktRx)
+        #print(pktRx)
         packet = somnPkt.SomnPacket(pktRx)
-        print(packet.PacketType)
-        print("----- END RX TH ----")
+        #print(packet.PacketType)
+        #print("----- END RX TH ----")
         self.RxQ.put(packet)
         con.close()
 
@@ -107,11 +107,11 @@ class TxThread(threading.Thread):
       except queue.Empty:
         pass
       else: # send packet to desired peer
-        print("---- START TX TH ------")
-        print(packet.Packet.PacketFields, packet.TxAddress, packet.TxPort, packet.Packet.PacketType)
+        #print("---- START TX TH ------")
+        #print(packet.Packet.PacketFields, packet.TxAddress, packet.TxPort, packet.Packet.PacketType)
         pktTx = packet.Packet.ToBytes()
-        print(pktTx)
-        print("---------- END TX TH ---------")
+        #print(pktTx)
+        #print("---------- END TX TH ---------")
         if LOOPBACK_MODE:
           IP = SOMN_LOOPBACK_IP
           PORT = SOMN_LOOPBACK_PORT
