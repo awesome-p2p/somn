@@ -2,6 +2,7 @@
 
 import somnMesh
 import curses
+import multiprocessing
 
 uiRunning = True
 
@@ -14,6 +15,8 @@ def nodePrintCallback(nodeId, outputStr):
 def menu_addnode(scr):
   node = somnMesh.CreateNode(nodePrintCallback)
   node.start()
+  #p = multiprocessing.Process(target=node.start, daemon=True)
+  #p.start()
 
 def menu_quit(scr):
   global uiRunning
