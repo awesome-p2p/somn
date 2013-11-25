@@ -68,7 +68,7 @@ class somnMesh(threading.Thread):
           packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollResponse, Int2IP(enrollResponse.PacketFields['RespNodeIP']), enrollResponse.PacketFields['RespNodePort']) 
           self.TCPTxQ.put(packedEnrollResponse)
           self.enrolled = True
-          print("Enrolled complete")
+          print("Enrolled to: ", enrollResponse.PacketFields['RespNodeID'])
           #break
     return udp  
   
@@ -83,7 +83,7 @@ class somnMesh(threading.Thread):
       if Rx.bound and Tx.bound: break
     
     self.nodePort = Rx.port
-    print(self.nodePort)
+    print(self.nodeID,self.nodePort)
    
     enrollAttempts = 0
     
@@ -156,20 +156,20 @@ class somnMesh(threading.Thread):
     #RxPkt = somnPkt.SomnPacket(rawPkt)
     pktType = RxPkt.PacketType
     if pktType == somnPkt.SomnPacketType.NodeEnrollment:
-      print("Enrollment Packet Received")
+      #print("Enrollment Packet Received")
       # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
       if RxPkt.PacketFields['ReqNodeID'] == self.nodeID: return
       # We need to disable a timer, enroll the node, if timer has expired, do nothing
       for idx, pendingEnroll in enumerate(self.connCache):
         #print(pendingEnroll[0])
         if (RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['AckSeq']) == pendingEnroll[0]:
-            print("Enrollment ACKED")
             # disable timer
             pendingEnroll[1].cancel()
             # clear connCache entry
             self.connCache[idx] = (('',0),) 
             # add node
             self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['ReqNodeIP'], RxPkt.PacketFields['ReqNodePort'])
+            print("Enrolled Node: ", RxPkt.PacketFields['ReqNodeID'])
             break
 
     elif pktType == somnPkt.PacketType.Message:
@@ -179,17 +179,49 @@ class somnMesh(threading.Thread):
         print(RxPkt.PacketFields['Message'])
         # self.commRxQ.put(RxPkt) # TODO: strip headers before pushing onto queue
       # otherwise, propagate the message along the route
+      elif not RxPkt.PacketFields['Route']:
+        # generate bad_route event
+        print("nothing to see here, move along folks")
       else:
         nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
         TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(nextHop)) 
         self.TCPTxQ.put(TxPkt)
+    
     elif pktType == somnPkt.PacketType.RouteRequest:
       print("Route Req Packet Received")
-      if RxPkt.PacketFields['DestId'] == self.nodeID:
-        # end of route request, return to sender
-      elif self.routeTable.getNodeIndexById(RxPkt.PacketFields['DestId'])
-      elif RxPkt.PacketFields['HTL'] > 0:
-        # 
+      # if route field is -0-, then it is an in-progress route request
+      # otherwise it is a returning route request
+      if not RxPkt.PacketFields['Route']:
+        # check if we have the destid in our routeTable
+        idx = self.routeTable.getNodeIndexById(RxPkt.PacketFields['DestId'])
+        if idx < 0: # Continue route request
+          if RxPkt.PacketFields['HTL'] > 1:
+            RxPkt.PacketFields['ReturnRoute'] = self._pushRoute(RxPkt.PacketFields['ReturnRoute'], self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])) 
+            RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
+            RxPkt.PacketFields['LastNodeID'] = self.nodeID
+            #TODO: transmit to all nodes, except the transmitting node
+            #TxPkt = somnPkt.SomnPacketTxWapper(RxPkt, 0,0)
+          elif RxPkt.PacketFields['HTL'] == 1: # Last Node in query path
+            RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
+            TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])))
+            self.TCPTxQ.put(TxPkt)
+          else:
+            TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+            TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+            self.TCPTxQ.put(TxPkt)
+        else: # Dest Node is contained in route table
+          RxPkt.PacketFields['HTL'] = 0
+          RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], idx) 
+          TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+          RxPkt.PacketFields['LastNodeID'] = self.nodeID
+          TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+          self.TCPTxQ.put(TxPkt)
+      else: # route path is non-empty
+        RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getIndexFromNodeId(RxPkt.PacketFields['LastNodeID']))
+        RxPkt.PacketFields['LastNodeID'] = self.nodeID
+        TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+        TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+
     elif pktType == somnPkt.PacketType.BadRoute:
       print("Bad Route Packet Received")
     
@@ -243,10 +275,10 @@ class somnMesh(threading.Thread):
       self.connCache[self.nextConnCacheIndex] = (connCacheTag, TxTimer)
       self.nextConnCacheIndex = self.nextConnCacheIndex + 1
       if self.nextConnCacheIndex >= len(self.connCache): self.nextConnCacheIndex = 0
-      print("------- START UDP LISTEN -----------")
-      print(self.routeTable.getAvailRouteCount())
-      print("Responded to Enroll Request")
-      print("---------- END UDP LISTEN-----------")
+      #print("------- START UDP LISTEN -----------")
+      #print(self.routeTable.getAvailRouteCount())
+      #print("Responded to Enroll Request")
+      #print("---------- END UDP LISTEN-----------")
       self.TCPTxQ.put(packedEnrollResponse)
       TxTimer.start()
     else:
@@ -261,6 +293,7 @@ class somnMesh(threading.Thread):
       return routeIndex & 0x7
 
     #unknown route (discover from mesh)
+
     return 0
       
 
@@ -274,16 +307,16 @@ class somnMesh(threading.Thread):
     return newRoute
 
   def _enrollTimeout(self, nodeID, ACK):
-    for connAttempt in self.connCache:
-      if (nodeID, ACK) == connAttempt[1]:
-        connAttempt[1] = ('',0)
+    for idx, pendingEnroll in enumerate(self.connCache):
+      if (nodeID, ACK) == pendingEnroll[0]:
+        self.connCache[idx] = (('',0),)
         break
     return
 
   def _connTimeout(self, nodeIP, nodePort):
-    for connAttempt in self.connCache:
-      if (nodeIP, nodePort) == connAttempt[1]:
-        connAttempt[1] = ('',0)
+    for idx, connAttempt in enumerate(self.connCache):
+      if (nodeIP, nodePort) == connAttempt[0]:
+        self.connCache[idx] = (('',0),)
         break
     return
 

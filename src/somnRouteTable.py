@@ -37,7 +37,7 @@ class somnRoutingTable:
     for i in range(0,5):
       if self._nodeTable[i] != None:
         if self._nodeTable[i].nodeID == nodeId:
-          return i
+          return i + 1
     #if id not found, return -1
     return -1
 
