@@ -287,9 +287,13 @@ class somnMesh(threading.Thread):
         break
     return
 
-if __name__ == "__main__":
+def CreateNode():
   rxdq = queue.Queue()
   txdq = queue.Queue()
   mesh = somnMesh(txdq, rxdq)
+  return mesh
+
+if __name__ == "__main__":
+  mesh = CreateNode()
   mesh.start()
 
