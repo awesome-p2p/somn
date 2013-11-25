@@ -28,18 +28,26 @@ class somnMesh(threading.Thread):
   nodePort = 0
   lastEnrollReq = 0
   connCache = [('',0),('',0),('',0)]
+  _printCallbackFunction = None
    
 
-  def __init__(self, TxDataQ, RxDataQ):
+  def __init__(self, TxDataQ, RxDataQ, printCallback = None):
     threading.Thread.__init__(self)
     self.CommTxQ = TxDataQ
     self.CommRxQ = RxDataQ
     random.seed()
     self.nodeID = random.getrandbits(16)
     self.nextConnCacheIndex = 0
+    self._printCallbackFunction = printCallback
+
+  def print(self, outputStr):
+      if self._printCallbackFunction == None:
+          print("{0:04X}: {1}".format(self.nodeID, outputStr))
+      else:
+        self._printCallbackFunction(self.nodeID, outputStr)
 
   def enroll(self):
-    print("enrolling")
+    self.print("enrolling")
     tcpRespTimeout = False
     ACK = random.getrandbits(16)
     enrollPkt = somnPkt.SomnPacket()
@@ -68,8 +76,8 @@ class somnMesh(threading.Thread):
           packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollResponse, Int2IP(enrollResponse.PacketFields['RespNodeIP']), enrollResponse.PacketFields['RespNodePort']) 
           self.TCPTxQ.put(packedEnrollResponse)
           self.enrolled = True
-          print("Enrolled to: ", enrollResponse.PacketFields['RespNodeID'])
           self.TCPRxQ.task_done()
+          self.print("Enrolled to: ", enrollResponse.PacketFields['RespNodeID'])
           #break
     return udp  
   
@@ -99,7 +107,7 @@ class somnMesh(threading.Thread):
         enrollAttempts = enrollAttempts + 1
       else:
         self.enrolled = True
-        print("Enrolled as Alhpa Node")
+        self.print("Enrolled as Alpha Node")
         break
     #start main loop to handle incoming queueus
     self._mainLoopRunning = 1
@@ -321,9 +329,13 @@ class somnMesh(threading.Thread):
         break
     return
 
-if __name__ == "__main__":
+def CreateNode(printCallback = None):
   rxdq = queue.Queue()
   txdq = queue.Queue()
-  mesh = somnMesh(txdq, rxdq)
+  mesh = somnMesh(txdq, rxdq, printCallback)
+  return mesh
+
+if __name__ == "__main__":
+  mesh = CreateNode()
   mesh.start()
 
