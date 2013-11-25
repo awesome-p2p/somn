@@ -35,10 +35,15 @@ def drawMenu(scr):
     y += 1
 
 def drawNodeOutput(scr):
+  maxlines = 20
   x = 40
   y = 5
   scr.addstr(y, x, "Node Output:")
   y += 1
+
+  while len(globalNodeOutput) > maxlines:
+    globalNodeOutput.pop(0)
+
   for line in globalNodeOutput:
     scr.addstr(y, x, line)
     y += 1
@@ -61,7 +66,8 @@ def uiMain(mainscr):
     if c != -1:
       for opt in menuOptions:
         if c == ord(opt[0].lower()) or c == ord(opt[0].upper()):
-          opt[2](mainscr)
+          if opt[2] is not None:
+            opt[2](mainscr)
 
 
 if __name__ == "__main__":

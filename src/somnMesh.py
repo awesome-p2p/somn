@@ -40,14 +40,14 @@ class somnMesh(threading.Thread):
     self.nextConnCacheIndex = 0
     self._printCallbackFunction = printCallback
 
-  def print(self, outputStr):
+  def printinfo(self, outputStr):
       if self._printCallbackFunction == None:
           print("{0:04X}: {1}".format(self.nodeID, outputStr))
       else:
         self._printCallbackFunction(self.nodeID, outputStr)
 
   def enroll(self):
-    self.print("enrolling")
+    self.printinfo("enrolling")
     tcpRespTimeout = False
     ACK = random.getrandbits(16)
     enrollPkt = somnPkt.SomnPacket()
@@ -76,7 +76,7 @@ class somnMesh(threading.Thread):
           packedEnrollResponse = somnPkt.SomnPacketTxWrapper(enrollResponse, Int2IP(enrollResponse.PacketFields['RespNodeIP']), enrollResponse.PacketFields['RespNodePort']) 
           self.TCPTxQ.put(packedEnrollResponse)
           self.enrolled = True
-          self.print("Enrolled to: ", enrollResponse.PacketFields['RespNodeID'])
+          self.printinfo("Enrolled to: ", enrollResponse.PacketFields['RespNodeID'])
           #break
     return udp  
   
@@ -91,7 +91,7 @@ class somnMesh(threading.Thread):
       if Rx.bound and Tx.bound: break
     
     self.nodePort = Rx.port
-    print(self.nodeID,self.nodePort)
+    self.printinfo("Port: {0}".format(self.nodePort))
    
     enrollAttempts = 0
     
@@ -106,7 +106,7 @@ class somnMesh(threading.Thread):
         enrollAttempts = enrollAttempts + 1
       else:
         self.enrolled = True
-        self.print("Enrolled as Alpha Node")
+        self.printinfo("Enrolled as Alpha Node")
         break
     #start main loop to handle incoming queueus
     self._mainLoopRunning = 1
