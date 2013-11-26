@@ -6,17 +6,25 @@ import multiprocessing
 
 uiRunning = True
 
-globalNodeOutput = []
+#IPC multiprocessing manager
+ipcMgr = multiprocessing.Manager()
 
+#Output list written to by all nodes
+globalNodeOutput = ipcMgr.list()
+
+
+def startupNewNode(nodeOutputList):
+  node = somnMesh.CreateNode(nodePrintCallback)
+  node.start()
+  node.join()
 
 def nodePrintCallback(nodeId, outputStr):
   globalNodeOutput.append("{0:04X}: {1}".format(nodeId, outputStr))
   
 def menu_addnode(scr):
-  node = somnMesh.CreateNode(nodePrintCallback)
-  node.start()
-  #p = multiprocessing.Process(target=node.start, daemon=True)
-  #p.start()
+  outputList = globalNodeOutput
+  p = multiprocessing.Process(target=startupNewNode, args=(outputList,) , daemon=True)
+  p.start()
 
 def menu_quit(scr):
   global uiRunning
@@ -28,40 +36,47 @@ menuOptions = [
     ('Q', 'Quit', menu_quit)]
 
 def drawMenu(scr):
-  x = 10
+  x = 4
   y = 5
-  scr.addstr(y, x, "Main Menu")
+  scr.addstr(y, x, "MAIN MENU:")
   y += 1
 
   for opt in menuOptions:
-    scr.addstr(y, x, "{0}) {1}".format(opt[0], opt[1]))
+    scr.addstr(y, x + 1, "{0}) {1}".format(opt[0], opt[1]))
     y += 1
 
 def drawNodeOutput(scr):
   maxlines = 20
-  x = 40
+  x = 30
   y = 5
-  scr.addstr(y, x, "Node Output:")
+  scr.addstr(y, x, "NODE OUTPUT:")
   y += 1
 
-  while len(globalNodeOutput) > maxlines:
+  while globalNodeOutput is not None and len(globalNodeOutput) > maxlines:
     globalNodeOutput.pop(0)
 
-  for line in globalNodeOutput:
-    scr.addstr(y, x, line)
-    y += 1
+  if globalNodeOutput is not None:
+    for line in globalNodeOutput:
+      scr.addstr(y, x, line)
+      y += 1
   
 def uiMain(mainscr):
   while uiRunning:
+    screenwidth = mainscr.getmaxyx()[1]
+    screenheight = mainscr.getmaxyx()[0]
+
+
     mainscr.clear()
     mainscr.timeout(500)
-    mainscr.addstr(0,0, "Test!")
+    mainscr.hline(0,0,'=',screenwidth)
+    mainscr.addstr(1,1, "SOMN Control Panel")
+    mainscr.hline(2,0,'=',screenwidth)
 
     drawMenu(mainscr)
     drawNodeOutput(mainscr)
 
     mainscr.refresh()
-    mainscr.addstr(1,1, "{0}".format(len(globalNodeOutput)))
+    mainscr.addstr(3,1, "Active Processes: {0}".format(len(multiprocessing.active_children())))
 
     c = mainscr.getch()
 
