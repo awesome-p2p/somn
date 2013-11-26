@@ -159,7 +159,7 @@ class somnMesh(threading.Thread):
 
     #send packet to TX layer
     self.TCPTxQ.put(txPktWrapper)
-    
+    self.CommTxQ.task_done()
  
   def _handleTcpRx(self):
     #print("Handle RX")
@@ -205,6 +205,17 @@ class somnMesh(threading.Thread):
     
     elif pktType == somnPkt.PacketType.RouteRequest:
       print("Route Req Packet Received")
+      if RxPkt.PacketFields['SourceID'] == self.nodeID:
+        # this our route request, deal with it.
+        if self.currentRouteID == RxPkt.PacketFields['destID']:
+          if RxPkt.PacketFields['Route'] != 0:
+            pendingRoute = RxPkt.Packetfields['Route']
+          elif RxPkt.PacketFields['HTL'] > 10:
+            RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] + 1
+            TxPkt = somPkt.SomnPacket(RxPkt.ToBytes())
+
+        else: # this route has been served
+          break
       # if route field is -0-, then it is an in-progress route request
       # otherwise it is a returning route request
       if not RxPkt.PacketFields['Route']:
@@ -269,9 +280,12 @@ class somnMesh(threading.Thread):
     elif pktType == somnPkt.PacketType.DropConnection:
       print("Drop Conn Packet Received")
     
-    else:
-       return
-    
+    else: 
+      self.TCPRxQ.task_done()
+      return
+    self.TCPRxQ.task_done()
+    return
+
   def _handleUdpRx(self):
     #print("handleUDP")
     try:
@@ -288,6 +302,7 @@ class somnMesh(threading.Thread):
 
     if self.routeTable.getNodeIndexFromId(enrollRequest.PacketFields['ReqNodeID']) > 0: 
       self.printinfo("Node already connected, ignoring")
+      self.UDPRxQ.task_done()
       return
 
     
@@ -309,8 +324,10 @@ class somnMesh(threading.Thread):
       TxTimer.start()
     else:
       self.lastEnrollReq = enrollRequest.PacketFields['ReqNodeID']
-
-
+    
+    self.UDPRxQ.task_done()
+    return
+   
   #get route from this node to dest node
   def _getRoute(self, destId):
     #first, check if the dest is a neighboring node
@@ -319,6 +336,14 @@ class somnMesh(threading.Thread):
       return routeIndex & 0x7
 
     #unknown route (discover from mesh)
+    routePkt = somnPkt.SomnPkt()
+    routePkt.InitEmpty(somnPkt.PacketType.RouteRequest)
+    routePkt.PacketFields['SourceID'] = self.nodeID
+    routePkt.PacketFields['LastNodeID'] = self.nodeID
+    routePkt.PacketFields['DestID'] = destId
+    routePkt.PacketFields['HTL'] = 1
+       
+    
 
     return 0
       
@@ -345,6 +370,20 @@ class somnMesh(threading.Thread):
         self.connCache[idx] = (('',0),)
         break
     return
+
+  def addConnection(self, DestNodeID):
+    addConnPkt = somnPkt.SomnPkt()
+    addConnPkt.InitEmpty(somnPkt.PacketType.AddConnection)
+    addConnPkt.PacketFields['ReqNodeID'] = self.nodeID
+    addConnPkt.PacketFields['ReqNodeIP'] = self.nodeIP
+    addConnPkt.PacketFields['ReqNodePort'] = self.nodePort
+    addConnPkt.PacketFields['AckSeq'] = random.randbits(16)
+    route = self._getRoute(DestNodeID)
+    if route > 0: 
+      addConnPkt.PacketFields['Route'] = route
+    else:
+      self.printinfo("AddConnection Failed to get route")
+    
 
 def CreateNode(printCallback = None):
   mesh = somnMesh(queue.Queue(), queue.Queue(), printCallback)
