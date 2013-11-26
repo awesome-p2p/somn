@@ -40,6 +40,10 @@ class somnMesh(threading.Thread):
     self.nextConnCacheIndex = 0
     self._printCallbackFunction = printCallback
 
+    TCPTxQ = queue.Queue()
+    TCPRxQ = queue.Queue()
+    UDPRxQ = queue.Queue()
+
   def printinfo(self, outputStr):
       if self._printCallbackFunction == None:
           print("{0:04X}: {1}".format(self.nodeID, outputStr))
@@ -70,6 +74,7 @@ class somnMesh(threading.Thread):
        # print(enrollResponse.PacketFields)
        # print(enrollResponse.PacketType)
        # print("-------- END ENROLL ---------")
+        self.printinfo("Got enrollment response from {0:04X}".format(enrollResponse.PacketFields['RespNodeID']))
         if enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['AckSeq'] == ACK:
           self.routeTable.addNode(enrollResponse.PacketFields['RespNodeID'], enrollResponse.PacketFields['RespNodeIP'], enrollResponse.PacketFields['RespNodePort'])
           
@@ -77,7 +82,7 @@ class somnMesh(threading.Thread):
           self.TCPTxQ.put(packedEnrollResponse)
           self.enrolled = True
           self.TCPRxQ.task_done()
-          self.printinfo("Enrolled to:{0}".format(enrollResponse.PacketFields['RespNodeID']))
+          self.printinfo("Enrolled to: {0:04X}".format(enrollResponse.PacketFields['RespNodeID']))
           #break
     return udp  
   
@@ -162,8 +167,10 @@ class somnMesh(threading.Thread):
       RxPkt = self.TCPRxQ.get(False)
     except:
       return
+    self.TCPRxQ.task_done()
     #RxPkt = somnPkt.SomnPacket(rawPkt)
     pktType = RxPkt.PacketType
+    #self.printinfo("Rx'd TCP packet of type: {0}".format(pktType))
     if pktType == somnPkt.SomnPacketType.NodeEnrollment:
       #print("Enrollment Packet Received")
       # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
@@ -262,7 +269,8 @@ class somnMesh(threading.Thread):
     elif pktType == somnPkt.PacketType.DropConnection:
       print("Drop Conn Packet Received")
     
-    else: return
+    else:
+       return
     
   def _handleUdpRx(self):
     #print("handleUDP")
@@ -271,8 +279,17 @@ class somnMesh(threading.Thread):
     except:
       return
     enrollRequest = somnPkt.SomnPacket(enrollPkt)
-    if self.routeTable.getNodeIndexFromId(enrollRequest.PacketFields['ReqNodeID']) > 0: 
+
+    #ignore incoming enrollment requests from self
+    if enrollRequest.PacketFields['ReqNodeID'] == self.nodeID:
       return
+
+    self.printinfo("Got enrollment request from {0:04X}".format(enrollRequest.PacketFields['ReqNodeID']))
+
+    if self.routeTable.getNodeIndexFromId(enrollRequest.PacketFields['ReqNodeID']) > 0: 
+      self.printinfo("Node already connected, ignoring")
+      return
+
     
     if self.routeTable.getAvailRouteCount() > 2 or (self.lastEnrollReq == enrollRequest.PacketFields['ReqNodeID'] and self.routeTable.getAvailRouteCount() > 0):
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
@@ -330,9 +347,7 @@ class somnMesh(threading.Thread):
     return
 
 def CreateNode(printCallback = None):
-  rxdq = queue.Queue()
-  txdq = queue.Queue()
-  mesh = somnMesh(txdq, rxdq, printCallback)
+  mesh = somnMesh(queue.Queue(), queue.Queue(), printCallback)
   return mesh
 
 if __name__ == "__main__":
