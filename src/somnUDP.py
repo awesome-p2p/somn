@@ -5,25 +5,21 @@ import queue
 import time
 import somnPkt
 
-class somnUDPThread(threading.Thread):
-  def __init__(self, enrollPkt, RxQ, networkAlive, UDPAlive):
-    threading.Thread.__init__(self)
-    self.enrollPkt = enrollPkt
-    self.RxQ = RxQ
-    self.networkAlive = networkAlive
-    self.UDPAlive = UDPAlive
-  def run(self):
-    udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
-    udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
-    udpSkt.sendto(self.enrollPkt.ToBytes(), ('<broadcast>', 45000))
-    udpSkt.close()
+globalSocketRunning = None
+globalSocketSubscribers = []
+UDPAlive = True
+networkAlive = True
 
+def globalSocketHandler():
+    global globalSocketRunning
+    print("Starting global socket handler")
+    globalSocketRunning = True
+  
     udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
     udpSkt.bind(('', 45000))
-    while self.networkAlive.is_set() and self.UDPAlive.is_set():
+    while networkAlive and UDPAlive:
       try:
         data, addr = udpSkt.recvfrom(24)  
       except socket.timeout:
@@ -32,8 +28,35 @@ class somnUDPThread(threading.Thread):
       #packet = somnPkt.SomnPacket()
       #packet.Decode(data)
       else:
-        self.RxQ.put(data)
+        for subscriber in globalSocketSubscribers:
+          subscriber.udpSocketCallback(data)
+        #self.RxQ.put(data)
     udpSkt.close()
+
+
+class somnUDPThread(threading.Thread):
+  def __init__(self, enrollPkt, RxQ, networkAlive, UDPAlive):
+    threading.Thread.__init__(self)
+    self.enrollPkt = enrollPkt
+    self.RxQ = RxQ
+    self.networkAlive = networkAlive
+    self.UDPAlive = UDPAlive
+  def run(self):
+    global globalSocketRunning
+    udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
+    udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+    udpSkt.sendto(self.enrollPkt.ToBytes(), ('<broadcast>', 45000))
+    udpSkt.close()
+
+    if globalSocketRunning != True:
+      globalSocketThread = threading.Thread(target = globalSocketHandler)
+      globalSocketThread.start()
+      globalSocketSubscribers.append(self)
+      
+  def udpSocketCallback(self, data):
+    self.RxQ.put(data)
+
 
 if __name__=="__main__":
   socket.setdefaulttimeout(5)
