@@ -43,6 +43,11 @@ class somnMesh(threading.Thread):
     TCPTxQ = queue.Queue()
     TCPRxQ = queue.Queue()
     UDPRxQ = queue.Queue()
+    
+    pendingRouteID = 0
+    pendingRoute = 0
+    routeLock = threading.Lock()
+    routeBlock = threading.Event()
 
   def printinfo(self, outputStr):
       if self._printCallbackFunction == None:
@@ -116,13 +121,11 @@ class somnMesh(threading.Thread):
         break
     #start main loop to handle incoming queueus
     self._mainLoopRunning = 1
-    testCount = 0
+    rxThread = threading.Thread(target = self._handleTcpRx)
+    rxThread.start()
     while self._mainLoopRunning:
-      self._handleTcpRx()
       self._handleUdpRx()
       self._handleTx()
-      #time.sleep(5)
-      #testCount = testCount + 1
 
     # Do a bunch of stuff
     self.networkAlive.clear()
@@ -145,7 +148,7 @@ class somnMesh(threading.Thread):
       route = cacheRoute[cacheId.index(destId)]
     else:
       route = self._getRoute(destId)
-    
+     
     #pop first step in route from route string
     newRoute = self._popRoute(route)
     nextRouteStep = newRoute[0]
@@ -162,129 +165,132 @@ class somnMesh(threading.Thread):
     self.CommTxQ.task_done()
  
   def _handleTcpRx(self):
-    #print("Handle RX")
-    try:
-      RxPkt = self.TCPRxQ.get(False)
-    except:
-      return
-    self.TCPRxQ.task_done()
-    #RxPkt = somnPkt.SomnPacket(rawPkt)
-    pktType = RxPkt.PacketType
-    #self.printinfo("Rx'd TCP packet of type: {0}".format(pktType))
-    if pktType == somnPkt.SomnPacketType.NodeEnrollment:
-      #print("Enrollment Packet Received")
-      # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
-      if RxPkt.PacketFields['ReqNodeID'] == self.nodeID: return
-      # We need to disable a timer, enroll the node, if timer has expired, do nothing
-      for idx, pendingEnroll in enumerate(self.connCache):
-        #print(pendingEnroll[0])
-        if (RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['AckSeq']) == pendingEnroll[0]:
-            # disable timer
-            pendingEnroll[1].cancel()
-            # clear connCache entry
-            self.connCache[idx] = (('',0),) 
-            # add node
-            self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['ReqNodeIP'], RxPkt.PacketFields['ReqNodePort'])
-            print("Enrolled Node: ", RxPkt.PacketFields['ReqNodeID'])
-            break
+    while self._mainLoopRunning:
+      try:
+        RxPkt = self.TCPRxQ.get(False)
+      except:
+        continue
+      pktType = RxPkt.PacketType
+      #self.printinfo("Rx'd TCP packet of type: {0}".format(pktType))
+      if pktType == somnPkt.SomnPacketType.NodeEnrollment:
+        #print("Enrollment Packet Received")
+        # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
+        if RxPkt.PacketFields['ReqNodeID'] == self.nodeID: continue 
+        # We need to disable a timer, enroll the node, if timer has expired, do nothing
+        for idx, pendingEnroll in enumerate(self.connCache):
+          #print(pendingEnroll[0])
+          if (RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['AckSeq']) == pendingEnroll[0]:
+              # disable timer
+              pendingEnroll[1].cancel()
+              # clear connCache entry
+              self.connCache[idx] = (('',0),) 
+              # add node
+              self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], RxPkt.PacketFields['ReqNodeIP'], RxPkt.PacketFields['ReqNodePort'])
+              print("Enrolled Node: ", RxPkt.PacketFields['ReqNodeID'])
+              break
 
-    elif pktType == somnPkt.PacketType.Message:
-      print("Message Packet Received")
-      # Check if we are the dest node
-      if RxPkt.PacketFields['DestID'] == self.nodeID:
-        print(RxPkt.PacketFields['Message'])
-        # self.commRxQ.put(RxPkt) # TODO: strip headers before pushing onto queue
-      # otherwise, propagate the message along the route
-      elif not RxPkt.PacketFields['Route']:
-        # generate bad_route event
-        print("nothing to see here, move along folks")
-      else:
-        nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
-        TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(nextHop)) 
-        self.TCPTxQ.put(TxPkt)
-    
-    elif pktType == somnPkt.PacketType.RouteRequest:
-      print("Route Req Packet Received")
-      if RxPkt.PacketFields['SourceID'] == self.nodeID:
-        # this our route request, deal with it.
-        if self.currentRouteID == RxPkt.PacketFields['destID']:
-          if RxPkt.PacketFields['Route'] != 0:
-            pendingRoute = RxPkt.Packetfields['Route']
-          elif RxPkt.PacketFields['HTL'] > 10:
-            RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] + 1
-            TxPkt = somPkt.SomnPacket(RxPkt.ToBytes())
-
-        else: # this route has been served
-          break
-      # if route field is -0-, then it is an in-progress route request
-      # otherwise it is a returning route request
-      if not RxPkt.PacketFields['Route']:
-        # check if we have the destid in our routeTable
-        idx = self.routeTable.getNodeIndexById(RxPkt.PacketFields['DestId'])
-        if idx < 0: # Continue route request
-          if RxPkt.PacketFields['HTL'] > 1:
-            RxPkt.PacketFields['ReturnRoute'] = self._pushRoute(RxPkt.PacketFields['ReturnRoute'], self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])) 
-            RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
-            RxPkt.PacketFields['LastNodeID'] = self.nodeID
-            #TODO: transmit to all nodes, except the transmitting node
-            #TxPkt = somnPkt.SomnPacketTxWapper(RxPkt, 0,0)
-          elif RxPkt.PacketFields['HTL'] == 1: # Last Node in query path
-            RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
-            TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])))
-            self.TCPTxQ.put(TxPkt)
-          else:
+      elif pktType == somnPkt.PacketType.Message:
+        print("Message Packet Received")
+        # Check if we are the dest node
+        if RxPkt.PacketFields['DestID'] == self.nodeID:
+          print(RxPkt.PacketFields['Message'])
+          # self.commRxQ.put(RxPkt) # TODO: strip headers before pushing onto queue
+        # otherwise, propagate the message along the route
+        elif not RxPkt.PacketFields['Route']:
+          # generate bad_route event
+          print("nothing to see here, move along folks")
+        else:
+          nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
+          TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(nextHop)) 
+          self.TCPTxQ.put(TxPkt)
+      
+      elif pktType == somnPkt.PacketType.RouteRequest:
+        print("Route Req Packet Received")
+        if RxPkt.PacketFields['SourceID'] == self.nodeID:
+          # this our route request, deal with it.
+          self.routeLock.acquire()
+          if self.pendingRouteID == RxPkt.PacketFields['destID']:
+            if RxPkt.PacketFields['Route'] != 0:
+              pendingRoute = RxPkt.Packetfields['Route']
+              self.routeBlock.clear()
+              self.routeLock.release()
+            elif RxPkt.PacketFields['HTL'] < 10:
+              self.routeLock.release()
+              RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] + 1
+              TxPkt = somPkt.SomnPacket(RxPkt.ToBytes())
+          else: # this route has been served
+            self.routeLock.release()
+            self.TCPRxQ.task_done()
+            continue 
+        # if route field is -0-, then it is an in-progress route request
+        # otherwise it is a returning route request
+        if not RxPkt.PacketFields['Route']:
+          # check if we have the destid in our routeTable
+          idx = self.routeTable.getNodeIndexById(RxPkt.PacketFields['DestId'])
+          if idx < 0: # Continue route request
+            if RxPkt.PacketFields['HTL'] > 1:
+              RxPkt.PacketFields['ReturnRoute'] = self._pushRoute(RxPkt.PacketFields['ReturnRoute'], self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])) 
+              RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
+              RxPkt.PacketFields['LastNodeID'] = self.nodeID
+              #TODO: transmit to all nodes, except the transmitting node
+              #TxPkt = somnPkt.SomnPacketTxWapper(RxPkt, 0,0)
+            elif RxPkt.PacketFields['HTL'] == 1: # Last Node in query path
+              RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
+              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])))
+              self.TCPTxQ.put(TxPkt)
+            else:
+              TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+              self.TCPTxQ.put(TxPkt)
+          else: # Dest Node is contained in route table
+            RxPkt.PacketFields['HTL'] = 0
+            RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], idx) 
             TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+            RxPkt.PacketFields['LastNodeID'] = self.nodeID
             TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
             self.TCPTxQ.put(TxPkt)
-        else: # Dest Node is contained in route table
-          RxPkt.PacketFields['HTL'] = 0
-          RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], idx) 
-          TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+        else: # route path is non-empty
+          RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getIndexFromNodeId(RxPkt.PacketFields['LastNodeID']))
           RxPkt.PacketFields['LastNodeID'] = self.nodeID
+          TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
           TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
-          self.TCPTxQ.put(TxPkt)
-      else: # route path is non-empty
-        RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getIndexFromNodeId(RxPkt.PacketFields['LastNodeID']))
-        RxPkt.PacketFields['LastNodeID'] = self.nodeID
-        TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
-        TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
 
-    elif pktType == somnPkt.PacketType.BadRoute:
-      print("Bad Route Packet Received")
-    
-    elif pktType == somnPkt.PacketType.AddConnection:
-      for pendingConn in self.connCache:
-        if (RxPkt.PacketFields['RespNodeID'], RxPkt.PacketFields['AckSeq']) == pendingConn[1]: # This is response 
-          # cancel timer
-          pendingConn[2].cancel()
-          # add node
-          routeTable.addNode(RxPkt.PacketFields['RespNodeID'], RxPkt.PacketFields['RespNodeIP'], RxPkt.PacketFields['RespNodePort'])
-          # send AddConnection ACK packet
-          packedTxPkt = somnPkt.SomnPacketTxWrapper(somnPkt.SomnPacket(RxPkt.ToBytes()),Int2IP(RxPkt.PacketFields['RespNodeIP']), RxPkt.PacketFields['RespNodePort'])
-          self.TCPTxQ.put(packedTxPkt)
-          return
-      # This is an incoming request 
-      # generate a TCP Tx packet, start a timer, store ReqNodeID and timer object
-      TxPkt = somnPkt.SomnPacket(RxPkt.ToBytes())
-      TxPkt.Packetfields['RespNodeID'] = self.nodeID
-      TxPkt.Packetfields['RespNodeIP'] = self.nodeIP
-      TxPkt.Packetfields['RespNodePort'] = self.nodePort
-      connCacheTag = (TxPkt.PacketFilds['ReqNodeID'], TxtPkt.PacketFields['AckSeq'])
-      TxTimer = threading.Timer(5.0, self._connTimeout, connCacheTag)
-      self.connCache[self.nextconnCacheEntry] = (connCacheTag, TxTimer)
-      self.nextConnCacheEntry = self.nextConnCacheEntry + 1
-      if self.nextConnCacheEntry >= len(self.connCache):
-        self.nextConnCacheEntry = 0
-      print("Add Conn Packet Received")
-    
-    elif pktType == somnPkt.PacketType.DropConnection:
-      print("Drop Conn Packet Received")
-    
-    else: 
+      elif pktType == somnPkt.PacketType.BadRoute:
+        print("Bad Route Packet Received")
+      
+      elif pktType == somnPkt.PacketType.AddConnection:
+        for pendingConn in self.connCache:
+          if (RxPkt.PacketFields['RespNodeID'], RxPkt.PacketFields['AckSeq']) == pendingConn[1]: # This is response 
+            # cancel timer
+            pendingConn[2].cancel()
+            # add node
+            routeTable.addNode(RxPkt.PacketFields['RespNodeID'], RxPkt.PacketFields['RespNodeIP'], RxPkt.PacketFields['RespNodePort'])
+            # send AddConnection ACK packet
+            packedTxPkt = somnPkt.SomnPacketTxWrapper(somnPkt.SomnPacket(RxPkt.ToBytes()),Int2IP(RxPkt.PacketFields['RespNodeIP']), RxPkt.PacketFields['RespNodePort'])
+            self.TCPTxQ.put(packedTxPkt)
+            continue 
+        # This is an incoming request 
+        # generate a TCP Tx packet, start a timer, store ReqNodeID and timer object
+        TxPkt = somnPkt.SomnPacket(RxPkt.ToBytes())
+        TxPkt.Packetfields['RespNodeID'] = self.nodeID
+        TxPkt.Packetfields['RespNodeIP'] = self.nodeIP
+        TxPkt.Packetfields['RespNodePort'] = self.nodePort
+        connCacheTag = (TxPkt.PacketFilds['ReqNodeID'], TxtPkt.PacketFields['AckSeq'])
+        TxTimer = threading.Timer(5.0, self._connTimeout, connCacheTag)
+        self.connCache[self.nextconnCacheEntry] = (connCacheTag, TxTimer)
+        self.nextConnCacheEntry = self.nextConnCacheEntry + 1
+        if self.nextConnCacheEntry >= len(self.connCache):
+          self.nextConnCacheEntry = 0
+        print("Add Conn Packet Received")
+      
+      elif pktType == somnPkt.PacketType.DropConnection:
+        print("Drop Conn Packet Received")
+      
+      else: 
+        self.TCPRxQ.task_done()
+        continue
       self.TCPRxQ.task_done()
-      return
-    self.TCPRxQ.task_done()
-    return
+      continue
 
   def _handleUdpRx(self):
     #print("handleUDP")
@@ -342,11 +348,30 @@ class somnMesh(threading.Thread):
     routePkt.PacketFields['LastNodeID'] = self.nodeID
     routePkt.PacketFields['DestID'] = destId
     routePkt.PacketFields['HTL'] = 1
-       
-    
-
-    return 0
+    self.pendingRouteID = destID 
+    self.pendingRoute = 0
+    t = Threading.Timer(10.0, self._routeTimeout)
+    idx = 0
+    while idx < self.routeTable.getNodeCount():
+      TxPkt = somnPkt.SomnPacketTxWrapper(routePkt, self.routeTable.getNodeInfoByIndex(idx))
+      self.TCPTxQ.put(TxPkt)
+    t.start()  
+    self.routeBlock.wait()
       
+    try:
+      t.cancel()
+    except:
+      pass
+    return self.pendingRoute
+  
+  def _routeTimeout(self):
+    self.routeLock.acquire()
+    if self.routeBlock.isSet():
+      self.pendingRoute = 0
+      self.pendingRouteID = 0
+      self.routeBlock.clear()
+    self.routeLock.release()
+
 
   def _popRoute(self, route):
     firstStep = route & 0x7
