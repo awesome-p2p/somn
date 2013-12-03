@@ -1,14 +1,11 @@
 #!/usr/bin/python
 
 class somnRoutingTableEntry:
-  nodeID = 0
-  nodeAddress = ""
-  nodePort = 0
 
   def __init__(self, nodeid, addr, port):
-    nodeID = nodeid
-    nodeAddress = addr
-    nodePort = port
+    self.nodeID = nodeid
+    self.nodeAddress = addr
+    self.nodePort = port
 
 class somnRoutingTable:
   
