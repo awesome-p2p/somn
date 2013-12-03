@@ -19,6 +19,7 @@ def globalSocketHandler():
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST,1)
     udpSkt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
     udpSkt.bind(('', 45000))
+    #TODO networkAlive and UDPAlive need to be threading events that we can kill to bring the UDP thread down...
     while networkAlive and UDPAlive:
       try:
         data, addr = udpSkt.recvfrom(24)  
