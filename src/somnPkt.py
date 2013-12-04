@@ -25,8 +25,40 @@ class SomnPacket:
     def __init__(self, rawData = None):
         if rawData is not None:
             self.Decode(rawData)
-
-
+    
+    def Reset(self):
+      if self.PacketType == SomnPacketType.Message:
+        del self.PacketFields['Route'] 
+        del self.PacketFields['Flags'] 
+        del self.PacketFields['SourceID'] 
+        del self.PacketFields['DestID'] 
+        del self.PacketFields['Message']
+      elif self.PacketType == SomnPacketType.RouteRequest:
+        del self.PacketFields['Route']
+        del self.PacketFields['Flags'] 
+        del self.PacketFields['SourceID'] 
+        del self.PacketFields['DestID'] 
+        del self.PacketFields['LastNodeID'] 
+        del self.PacketFields['HTL'] 
+        del self.PacketFields['ReturnRoute'] 
+      elif self.PacketType == SomnPacketType.BadRoute:
+        del self.PacketFields['Route'] 
+        del self.PacketFields['Flags'] 
+        del self.PacketFields['SourceID'] 
+        del self.PacketFields['DestID'] 
+      elif (self.PacketType == SomnPacketType.AddConnection
+        or self.PacketType == SomnPacketType.DropConnection
+        or self.PacketType == SomnPacketType.NodeEnrollment):
+        del self.PacketFields['Route'] 
+        del self.PacketFields['Flags'] 
+        del self.PacketFields['ReqNodeID'] 
+        del self.PacketFields['RespNodeID'] 
+        del self.PacketFields['ReqNodePort'] 
+        del self.PacketFields['RespNodePort'] 
+        del self.PacketFields['ReqNodeIP'] 
+        del self.PacketFields['RespNodeIP'] 
+        del self.PacketFields['AckSeq'] 
+    
     def InitEmpty(self, packetType):
         #Check if packet has already been initialized
         if self._initialized == True:
@@ -76,7 +108,7 @@ class SomnPacket:
         if self.PacketType == SomnPacketType.Message:
             word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
             word2 = (self.PacketFields['DestID'] << 16) | (self.PacketFields['SourceID'] & 0xFFFF)
-            message = bytes(4*16)
+            message = self.PacketFields['Message'].encode('utf-8') #bytes(4*16)
             return struct.pack('!IIxxxx64s', word1, word2,message)
         
         elif self.PacketType == SomnPacketType.RouteRequest:
@@ -125,6 +157,7 @@ class SomnPacket:
             self.PacketFields['Flags'] = decoded[0] >> 30 
             self.PacketFields['DestID'] = decoded[1] >> 16
             self.PacketFields['SourceID'] = decoded[1] & 0xFFFF 
+            self.PacketFields['Message'] = decoded[2].decode('utf-8')
         #length 16 is mesh routing packet
         elif len(rawData) == 16:
             decoded = struct.unpack('!IIII', rawData)
@@ -175,9 +208,9 @@ class SomnPacket:
 
 
 class SomnPacketTxWrapper:
-    Packet = SomnPacket
-    TxAddress = ""
-    TxPort = 0
+    #Packet = SomnPacket
+    #TxAddress = ""
+    #TxPort = 0
 
     def __init__(self, packet, txaddr, txport):
         self.Packet = packet

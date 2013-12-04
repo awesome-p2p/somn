@@ -168,9 +168,9 @@ class somnMesh(threading.Thread):
     TxPkt.PacketFields['DestID'] = TxData.nodeID
     TxPkt.PacketFields['Message'] = TxData.data
     TxPkt.PacketFields['Route'] = newRoute[1]
-
     #create wrapper packet to send to next step in route
-    txPktWrapper = SomnPktTxWrapper(TxPkt, self.routeTable.getNodeInfoByIndex(nextRouteStep))
+    TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextRouteStep)
+    txPktWrapper = somnPkt.SomnPacketTxWrapper(TxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
 
     #send packet to TX layer
     self.TCPTxQ.put(txPktWrapper)
@@ -200,7 +200,7 @@ class somnMesh(threading.Thread):
               self.printinfo("Enrolled Node:{0:04X} ".format(RxPkt.PacketFields['ReqNodeID']))
               break
 
-      elif pktType == somnPkt.PacketType.Message:
+      elif pktType == somnPkt.SomnPacketType.Message:
         print("Message Packet Received")
         # Check if we are the dest node
         if RxPkt.PacketFields['DestID'] == self.nodeID:
@@ -212,10 +212,11 @@ class somnMesh(threading.Thread):
           print("nothing to see here, move along folks")
         else:
           nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
-          TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(nextHop)) 
+          TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextHop) 
+          TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort) 
           self.TCPTxQ.put(TxPkt)
       
-      elif pktType == somnPkt.PacketType.RouteRequest:
+      elif pktType == somnPkt.SomnPacketType.RouteRequest:
         print("Route Req Packet Received")
         if RxPkt.PacketFields['SourceID'] == self.nodeID:
           # this our route request, deal with it.
@@ -231,6 +232,7 @@ class somnMesh(threading.Thread):
               TxPkt = somPkt.SomnPacket(RxPkt.ToBytes())
           else: # this route has been served
             self.routeLock.release()
+            RxPkt.Reset()
             self.TCPRxQ.task_done()
             continue 
         # if route field is -0-, then it is an in-progress route request
@@ -250,29 +252,33 @@ class somnMesh(threading.Thread):
 
             elif RxPkt.PacketFields['HTL'] == 1: # Last Node in query path
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
-              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])))
+              TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID']))
+              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
             else:
               TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
-              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+              TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
+              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
           else: # Dest Node is contained in route table
             RxPkt.PacketFields['HTL'] = 0
             RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], idx) 
             TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
             RxPkt.PacketFields['LastNodeID'] = self.nodeID
-            TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+            TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
+            TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
             self.TCPTxQ.put(TxPkt)
         else: # route path is non-empty
           RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getIndexFromNodeId(RxPkt.PacketFields['LastNodeID']))
           RxPkt.PacketFields['LastNodeID'] = self.nodeID
           TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
-          TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, self.routeTable.getNodeInfoByIndex(TxIndex))
+          TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
+          TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
 
-      elif pktType == somnPkt.PacketType.BadRoute:
+      elif pktType == somnPkt.SomnPacketType.BadRoute:
         print("Bad Route Packet Received")
       
-      elif pktType == somnPkt.PacketType.AddConnection:
+      elif pktType == somnPkt.SomnPacketType.AddConnection:
         for pendingConn in self.connCache:
           if (RxPkt.PacketFields['RespNodeID'], RxPkt.PacketFields['AckSeq']) == pendingConn[1]: # This is response 
             # cancel timer
@@ -297,12 +303,14 @@ class somnMesh(threading.Thread):
           self.nextConnCacheEntry = 0
         print("Add Conn Packet Received")
       
-      elif pktType == somnPkt.PacketType.DropConnection:
+      elif pktType == somnPkt.SomnPacketType.DropConnection:
         print("Drop Conn Packet Received")
       
       else: 
+        RxPkt.Reset()
         self.TCPRxQ.task_done()
         continue
+      RxPkt.Reset()
       self.TCPRxQ.task_done()
       continue
 
@@ -313,7 +321,7 @@ class somnMesh(threading.Thread):
     except:
       return
     enrollRequest = somnPkt.SomnPacket(enrollPkt)
-
+    self.UDPRxQ.task_done()
     #ignore incoming enrollment requests from self
     if enrollRequest.PacketFields['ReqNodeID'] == self.nodeID:
       return
@@ -322,7 +330,7 @@ class somnMesh(threading.Thread):
 
     if self.routeTable.getNodeIndexFromId(enrollRequest.PacketFields['ReqNodeID']) > 0: 
       self.printinfo("Node already connected, ignoring")
-      self.UDPRxQ.task_done()
+      #self.UDPRxQ.task_done()
       return
 
     
@@ -344,8 +352,7 @@ class somnMesh(threading.Thread):
       TxTimer.start()
     else:
       self.lastEnrollReq = enrollRequest.PacketFields['ReqNodeID']
-    
-    self.UDPRxQ.task_done()
+    #self.UDPRxQ.task_done()
     return
    
   #get route from this node to dest node
@@ -367,8 +374,8 @@ class somnMesh(threading.Thread):
     t = threading.Timer(1, self._routeTimeout)
     idx = 1
     while idx < self.routeTable.getNodeCount():
-      destIP, destPort = self.routeTable.getNodeInfoByIndex(idx)
-      TxPkt = somnPkt.SomnPacketTxWrapper(routePkt, destIP, destPort)
+      TxNodeInfo = self.routeTable.getNodeInfoByIndex(idx)
+      TxPkt = somnPkt.SomnPacketTxWrapper(routePkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
       self.TCPTxQ.put(TxPkt)
       idx = idx + 1
     t.start()  
@@ -417,7 +424,7 @@ class somnMesh(threading.Thread):
 
   def addConnection(self, DestNodeID):
     addConnPkt = somnPkt.SomnPkt()
-    addConnPkt.InitEmpty(somnPkt.PacketType.AddConnection)
+    addConnPkt.InitEmpty(somnPkt.SomnPacketType.AddConnection)
     addConnPkt.PacketFields['ReqNodeID'] = self.nodeID
     addConnPkt.PacketFields['ReqNodeIP'] = self.nodeIP
     addConnPkt.PacketFields['ReqNodePort'] = self.nodePort
