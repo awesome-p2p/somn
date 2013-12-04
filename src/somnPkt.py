@@ -30,40 +30,6 @@ class SomnPacket:
       if rawData is not None:
           self.Decode(rawData)
     
-    def Reset(self):
-      self._initialized = False
-      if self.PacketType == SomnPacketType.Message:
-        del self.PacketFields['Route'] 
-        del self.PacketFields['Flags'] 
-        del self.PacketFields['SourceID'] 
-        del self.PacketFields['DestID'] 
-        del self.PacketFields['Message']
-      elif self.PacketType == SomnPacketType.RouteRequest:
-        del self.PacketFields['Route']
-        del self.PacketFields['Flags'] 
-        del self.PacketFields['SourceID'] 
-        del self.PacketFields['DestID'] 
-        del self.PacketFields['LastNodeID'] 
-        del self.PacketFields['RouteRequestCode']
-        del self.PacketFields['HTL'] 
-        del self.PacketFields['ReturnRoute'] 
-      elif self.PacketType == SomnPacketType.BadRoute:
-        del self.PacketFields['Route'] 
-        del self.PacketFields['Flags'] 
-        del self.PacketFields['SourceID'] 
-        del self.PacketFields['DestID'] 
-      elif (self.PacketType == SomnPacketType.AddConnection
-        or self.PacketType == SomnPacketType.DropConnection
-        or self.PacketType == SomnPacketType.NodeEnrollment):
-        del self.PacketFields['Route'] 
-        del self.PacketFields['Flags'] 
-        del self.PacketFields['ReqNodeID'] 
-        del self.PacketFields['RespNodeID'] 
-        del self.PacketFields['ReqNodePort'] 
-        del self.PacketFields['RespNodePort'] 
-        del self.PacketFields['ReqNodeIP'] 
-        del self.PacketFields['RespNodeIP'] 
-        del self.PacketFields['AckSeq'] 
     
     def InitEmpty(self, packetType):
         #Check if packet has already been initialized
@@ -176,6 +142,7 @@ class SomnPacket:
 
             #distinguish between route request and bad route
             code = (decoded[2] >> 16) & 0x0FFF
+            self.PacketFields['RouteRequestCode'] = code
             #if code = 1, route request
             if code == 1:
                 self.PacketType = SomnPacketType.RouteRequest

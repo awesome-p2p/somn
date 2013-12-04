@@ -62,8 +62,6 @@ class RxThread(threading.Thread):
             if chunk == b'': break
             pktRx = pktRx + chunk
           pktFlag = (struct.unpack('!I',pktRx)[0] & (3 << 30)) >> 30
-          #print("---- START RX TH -----")
-          #print(pktFlag)
           # Determine incoming packet lengt from packet type flag
           if pktFlag == 0:
             MSGLEN = (SOMN_MSG_PKT_SIZE)#WORD_SIZE)
@@ -77,10 +75,8 @@ class RxThread(threading.Thread):
           chunk = con.recv(MSGLEN - len(pktRx))
           if chunk == b'': break
           pktRx = pktRx + chunk
-        #print(pktRx)
         packet = somnPkt.SomnPacket(pktRx)
-        #print(packet.PacketType)
-        #print("----- END RX TH ----")
+        #print("Rx Thread received: ",packet.PacketFields, len(pktRx))
         self.RxQ.put(packet)
         con.close()
 
@@ -107,11 +103,7 @@ class TxThread(threading.Thread):
       except queue.Empty:
         pass
       else: # send packet to desired peer
-        #print("---- START TX TH ------")
-        #print(packet.Packet.PacketFields, packet.TxAddress, packet.TxPort, packet.Packet.PacketType)
         pktTx = packet.Packet.ToBytes()
-        #print(pktTx)
-        #print("---------- END TX TH ---------")
         if LOOPBACK_MODE:
           IP = SOMN_LOOPBACK_IP
           PORT = SOMN_LOOPBACK_PORT
@@ -144,8 +136,8 @@ class TxThread(threading.Thread):
           if sent == 0:
             raise RuntimeError("Python 3 sockets are dumb")
           totalsent = totalsent + sent
+        #print("Tx Thread Send: ", packet.Packet.PacketFields, totalsent) 
         self.TxQ.task_done()
-       # skt.shutdown(1)
         skt.close()
     
     print("Tx Thread shutting down")

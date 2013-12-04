@@ -161,8 +161,8 @@ class somnMesh(threading.Thread):
       self.printinfo(" *** NO ROUTE FOUND *** ")
       return
     #pop first step in route from route string
-    newRoute = self._popRoute(route)
-    nextRouteStep = newRoute[0]
+    nextRoute, newRoute = self._popRoute(route)
+    #nextRouteStep = newRoute[0]
 
     #set route string in packet
     TxPkt = somnPkt.SomnPacket()
@@ -170,9 +170,9 @@ class somnMesh(threading.Thread):
     TxPkt.PacketFields['SourceID'] = self.nodeID
     TxPkt.PacketFields['DestID'] = TxData.nodeID
     TxPkt.PacketFields['Message'] = TxData.data
-    TxPkt.PacketFields['Route'] = newRoute[1]
+    TxPkt.PacketFields['Route'] = newRoute
     #create wrapper packet to send to next step in route
-    TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextRouteStep)
+    TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextRoute)
     txPktWrapper = somnPkt.SomnPacketTxWrapper(TxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
 
     #send packet to TX layer
@@ -216,7 +216,7 @@ class somnMesh(threading.Thread):
         else:
           nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
           TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextHop) 
-          TxPkt = somnPkt.SomnTxPacketWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort) 
+          TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort) 
           self.TCPTxQ.put(TxPkt)
       
       elif pktType == somnPkt.SomnPacketType.RouteRequest:
@@ -224,15 +224,20 @@ class somnMesh(threading.Thread):
         if RxPkt.PacketFields['SourceID'] == self.nodeID:
           # this our route request, deal with it.
           self.routeLock.acquire()
-          if self.pendingRouteID == RxPkt.PacketFields['destID']:
+          if self.pendingRouteID == RxPkt.PacketFields['DestID']:
             if RxPkt.PacketFields['Route'] != 0:
-              pendingRoute = RxPkt.Packetfields['Route']
+              self.pendingRoute = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
               self.routeBlock.set()
               self.routeLock.release()
+              self.TCPRxQ.task_done()
+              continue
             elif RxPkt.PacketFields['HTL'] < 10:
               self.routeLock.release()
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] + 1
+              RxPkt.PacketFields['ReturnRoute'] = 0
               TxPkt = somPkt.SomnPacket(RxPkt.ToBytes())
+              self.TCPRxQ.task_done()
+              continue
           else: # this route has been served
             self.routeLock.release()
             #RxPkt.Reset()
@@ -245,7 +250,7 @@ class somnMesh(threading.Thread):
           idx = self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['DestID'])
           if idx < 0: # Continue route request
             if RxPkt.PacketFields['HTL'] > 1:
-              RxPkt.PacketFields['ReturnRoute'] = self._pushRoute(RxPkt.PacketFields['ReturnRoute'], self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID'])) 
+              RxPkt.PacketFields['ReturnRoute'] = self._pushRoute(RxPkt.PacketFields['ReturnRoute'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID'])) 
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
               RxPkt.PacketFields['LastNodeID'] = self.nodeID
               #TODO: transmit to all nodes, except the transmitting node
@@ -255,7 +260,7 @@ class somnMesh(threading.Thread):
 
             elif RxPkt.PacketFields['HTL'] == 1: # Last Node in query path
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
-              TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getIndexFromId(RxPkt.PacketFields['LastNodeID']))
+              TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
               TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
             else:
@@ -264,16 +269,20 @@ class somnMesh(threading.Thread):
               TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
           else: # Dest Node is contained in route table
+            print("Route Handler, dest node in table at: ",idx)
             RxPkt.PacketFields['HTL'] = 0
             RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], idx) 
-            TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
+            if RxPkt.PacketFields['ReturnRoute'] == 0: # Route did not go past HTL = 1
+              TxIndex = self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['SourceID'])
+            else:
+              TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
             RxPkt.PacketFields['LastNodeID'] = self.nodeID
             TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
-            print(TxNodeInfo)
+            #print(RxPkt.PacketFields)
             TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
             self.TCPTxQ.put(TxPkt)
         else: # route path is non-empty
-          RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getIndexFromNodeId(RxPkt.PacketFields['LastNodeID']))
+          RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
           RxPkt.PacketFields['LastNodeID'] = self.nodeID
           TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
           TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
@@ -380,7 +389,7 @@ class somnMesh(threading.Thread):
     idx = 1
     while idx <= self.routeTable.getNodeCount():
       TxNodeInfo = self.routeTable.getNodeInfoByIndex(idx)
-      print("getRoute Packet Type: ", routePkt.PacketType)
+      print("getRoute Packet Type: ", routePkt.PacketFields)
       TxPkt = somnPkt.SomnPacketTxWrapper(routePkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
       self.TCPTxQ.put(TxPkt)
       idx = idx + 1
