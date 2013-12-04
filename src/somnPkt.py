@@ -39,6 +39,7 @@ class SomnPacket:
         del self.PacketFields['SourceID'] 
         del self.PacketFields['DestID'] 
         del self.PacketFields['LastNodeID'] 
+        del self.PacketFields['RouteRequestCode']
         del self.PacketFields['HTL'] 
         del self.PacketFields['ReturnRoute'] 
       elif self.PacketType == SomnPacketType.BadRoute:
@@ -81,6 +82,7 @@ class SomnPacket:
             self.PacketFields['SourceID'] = 0
             self.PacketFields['DestID'] = 0
             self.PacketFields['LastNodeID'] = 0
+            self.PacketFields['RouteRequestCode'] = 0
             self.PacketFields['HTL'] = 0
             self.PacketFields['ReturnRoute'] = 0
         elif packetType == SomnPacketType.BadRoute:

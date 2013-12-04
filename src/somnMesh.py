@@ -156,7 +156,10 @@ class somnMesh(threading.Thread):
       route = self.cacheRoute[cacheId.index(TxData.nodeID)]
     else:
       route = self._getRoute(TxData.nodeID)
-     
+    
+    if route == 0: # no valid rout found
+      self.printinfo(" *** NO ROUTE FOUND *** ")
+      return
     #pop first step in route from route string
     newRoute = self._popRoute(route)
     nextRouteStep = newRoute[0]
@@ -224,7 +227,7 @@ class somnMesh(threading.Thread):
           if self.pendingRouteID == RxPkt.PacketFields['destID']:
             if RxPkt.PacketFields['Route'] != 0:
               pendingRoute = RxPkt.Packetfields['Route']
-              self.routeBlock.clear()
+              self.routeBlock.set()
               self.routeLock.release()
             elif RxPkt.PacketFields['HTL'] < 10:
               self.routeLock.release()
@@ -367,20 +370,23 @@ class somnMesh(threading.Thread):
     routePkt.InitEmpty(somnPkt.SomnPacketType.RouteRequest)
     routePkt.PacketFields['SourceID'] = self.nodeID
     routePkt.PacketFields['LastNodeID'] = self.nodeID
+    routePkt.PacketFields['RouteRequestCode'] = random.getrandbits(16)
     routePkt.PacketFields['DestID'] = destId
     routePkt.PacketFields['HTL'] = 1
     self.pendingRouteID = destId
     self.pendingRoute = 0
-    t = threading.Timer(1, self._routeTimeout)
+    t = threading.Timer(10, self._routeTimeout)
     idx = 1
-    while idx < self.routeTable.getNodeCount():
+    while idx <= self.routeTable.getNodeCount():
       TxNodeInfo = self.routeTable.getNodeInfoByIndex(idx)
+      print("getRoute Packet Dump: ", routePkt.PacketFields)
       TxPkt = somnPkt.SomnPacketTxWrapper(routePkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
       self.TCPTxQ.put(TxPkt)
       idx = idx + 1
     t.start()  
     self.printinfo("Waiting for route")
     self.routeBlock.wait()
+    self.routeBlock.clear()
     self.printinfo("Waiting Done") 
     try:
       t.cancel()
@@ -390,11 +396,11 @@ class somnMesh(threading.Thread):
   
   def _routeTimeout(self):
     self.routeLock.acquire()
-    if self.routeBlock.isSet():
+    if not self.routeBlock.isSet():
       self.printinfo("routeTimer Activate")
       self.pendingRoute = 0
       self.pendingRouteID = 0
-      self.routeBlock.clear()
+      self.routeBlock.set()
     self.routeLock.release()
     self.printinfo("routeTimer exit")
 
