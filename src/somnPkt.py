@@ -16,17 +16,22 @@ class SomnPacketType():
 
 
 class SomnPacket:
-    PacketType = SomnPacketType.Unknown
-    PacketFields = {}
+    #PacketType = SomnPacketType.Unknown
+    #PacketFields = {}
 
-    _rawData = ""
-    _initialized = False
+    #_rawData = ""
+   # _initialized = False
 
     def __init__(self, rawData = None):
-        if rawData is not None:
-            self.Decode(rawData)
+      self._initialized = False
+      self._rawData = ""
+      self.PacketFields = {}
+      self.PacketType = SomnPacketType.Unknown
+      if rawData is not None:
+          self.Decode(rawData)
     
     def Reset(self):
+      self._initialized = False
       if self.PacketType == SomnPacketType.Message:
         del self.PacketFields['Route'] 
         del self.PacketFields['Flags'] 
