@@ -9,6 +9,8 @@ import struct
 import time
 import somnPkt
 
+dumpLock = threading.Lock()
+
 class RxThread(threading.Thread):
   def __init__(self, ip, port, RxQ, RxAlive):
     threading.Thread.__init__(self)
@@ -76,7 +78,12 @@ class RxThread(threading.Thread):
           if chunk == b'': break
           pktRx = pktRx + chunk
         packet = somnPkt.SomnPacket(pktRx)
-        #print("Rx Thread received: ",packet.PacketFields, len(pktRx))
+        if RX_TRACE_ON:
+          dumpLock.acquire()
+          print(" **** Rx Thread Trace Start ***")
+          packet.PktDump()
+          print(" **** Rx Thread Trace Stop ***")
+          dumpLock.release()
         self.RxQ.put(packet)
         con.close()
 
@@ -136,7 +143,13 @@ class TxThread(threading.Thread):
           if sent == 0:
             raise RuntimeError("Python 3 sockets are dumb")
           totalsent = totalsent + sent
-        #print("Tx Thread Send: ", packet.Packet.PacketFields, totalsent) 
+        if TX_TRACE_ON:
+          dumpLock.acquire()
+          print(" *** Tx Thread Trace Start ***")
+          print("Dest Port: ", PORT) 
+          packet.Packet.PktDump()
+          print(" *** Tx Thread Trace Stop ***")
+          dumpLock.release()
         self.TxQ.task_done()
         skt.close()
     

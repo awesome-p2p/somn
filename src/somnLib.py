@@ -8,6 +8,9 @@ SOMN_MSG_PKT_SIZE = 19 * WORD_SIZE
 SOMN_MESH_PKT_SIZE = 6 * WORD_SIZE
 SOMN_ROUTE_PKT_SIZE = 4 * WORD_SIZE
 
+TX_TRACE_ON = True
+RX_TRACE_ON = True
+
 def IP2Int(IP):
     o = list(map(int, IP.split('.')))
     res = (16777216 * o[0]) + (65536 * o[1]) + (256 * o[2]) + o[3]

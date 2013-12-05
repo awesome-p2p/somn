@@ -2,6 +2,7 @@
 
 
 import struct
+from somnLib import *
 
 class SomnPacketType():
     Unknown = "Unknown"
@@ -180,6 +181,47 @@ class SomnPacket:
             #code = 3, node enrollment packet
             elif code == 3:
                 self.PacketType = SomnPacketType.NodeEnrollment
+
+    def PktDump(self):
+      print("*** Packet Dump ***")
+      print("Packet Type: ", self.PacketType)
+      for index, key in enumerate(self.PacketFields):
+        if key == 'Route':
+          value = "{0:#x}".format(self.PacketFields[key])
+        elif key == 'Flags':
+          value = "{0:d}".format(self.PacketFields[key])
+        elif key == 'SourceID': 
+          value = "{0:#04x}".format(self.PacketFields[key])
+        elif key == 'DestID':
+          value = "{0:#04x}".format(self.PacketFields[key])
+        elif key == 'Message':
+          value = "{}".format(self.PacketFields[key])
+        elif key == 'LastNodeID':
+          value = "{0:#04x}".format(self.PacketFields[key])
+        elif key == 'RouteRequestCode':
+          value = "{0:d}".format(self.PacketFields[key])
+        elif key == 'HTL':
+          value = "{0:d}".format(self.PacketFields[key])
+        elif key == 'ReturnRoute':
+          value = "{0:#x}".format(self.PacketFields[key])
+        elif key == 'ReqNodeID':
+          value = "{0:#04x}".format(self.PacketFields[key])
+        elif key == 'RespNodeID':
+          value = "{0:#04x}".format(self.PacketFields[key])
+        elif key == 'ReqNodePort':
+          value = "{0:d}".format(self.PacketFields[key])
+        elif key == 'RespNodePort':
+          value = "{0:d}".format(self.PacketFields[key])
+        elif key == 'ReqNodeIP':
+          value = "{}".format(Int2IP(self.PacketFields[key]))
+        elif key == 'RespNodeIP':
+          value = "{}".format(Int2IP(self.PacketFields[key]))
+        elif key == 'AckSeq':
+          value = "{0:d}".format(self.PacketFields[key])
+        else:
+          value = '*EMPTY*'
+        print("   {}:{}".format(key,value))
+
 
 
 class SomnPacketTxWrapper:
