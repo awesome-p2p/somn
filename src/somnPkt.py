@@ -87,8 +87,8 @@ class SomnPacket:
         elif self.PacketType == SomnPacketType.RouteRequest:
             word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
             word2 = (self.PacketFields['DestID'] << 16) | (self.PacketFields['SourceID'] & 0xFFFF)
-            word3 = (self.PacketFields['RouteRequestCode'] << 16) | (self.PacketFields['LastNodeID'] & 0xFFFF)
-            word4 = self.PacketFields['ReturnRoute']
+            word3 = ((self.PacketFields['HTL'] << 27) & 0xF0000000) | (self.PacketFields['RouteRequestCode'] << 16) | (self.PacketFields['LastNodeID'] & 0xFFFF)
+            word4 = self.PacketFields['ReturnRoute'] 
             return struct.pack('!IIII', word1, word2, word3, word4)
 
         elif self.PacketType == SomnPacketType.BadRoute:
@@ -147,6 +147,7 @@ class SomnPacket:
             if code == 1:
                 self.PacketType = SomnPacketType.RouteRequest
                 self.PacketFields['LastNodeID'] = decoded[2] & 0xFFFF
+                self.PacketFields['HTL'] = (decoded[2] >> 27)
                 self.PacketFields['ReturnRoute'] = decoded[3] & 0x3FFFFFFF
 
             #if code = 2, bad route
