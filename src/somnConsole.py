@@ -58,8 +58,6 @@ def startupNewNode(txq, rxq, cmdpipe):
         cmdpipe.send(node.routeTable.getConnectedNodes())
 
 
-
-
   #after node is killed, remove it from dict
   node.join()
   del nodeDict[nodeId]
@@ -92,10 +90,52 @@ def menu_quit(scr):
   uiRunning = False
 
 def menu_print(scr):
-  subwin = scr.derwin(10, 10, 10, 10)
+
+  conns = []
+  #get list of connections
+  for node in nodeDict:
+    nodeDict[node][2].send("GETCONN")
+    conns.append((node, nodeDict[node][2].recv()))
+
+  #open DOT file
+  f = open('graph.dot', 'w')
+  #write DOT file header
+  f.write("digraph somn {")
+
+  #write dot file lines
+  for connentry in conns:
+    srcnode = connentry[0]
+    for destnode in connentry[1]:
+      f.write('"{0:04X}" -> "{1:04X}";'.format(srcnode, destnode))
+
+  #write dot file footer
+  f.write("}")
+  
+  subwin = scr.derwin(20, 40, 10, 20)
   subwin.border()
-  subwin.addstr(1,1,"FFF")
+  subwin.addstr(1,1, "File written")
   subwin.refresh()
+  subwin.getch()
+
+def menu_showconns(scr):
+  subwin = scr.derwin(20, 40, 10, 20)
+  subwin.border()
+
+  conns = []
+  #get list of connections
+  for node in nodeDict:
+    nodeDict[node][2].send("GETCONN")
+    conns.append((node, nodeDict[node][2].recv()))
+
+  line = 1
+  for connentry in conns:
+    srcnode = connentry[0]
+    for destnode in connentry[1]:
+      subwin.addstr(line, 1, "{0:04X} -> {1:04X}".format(srcnode, destnode))
+      line += 1
+
+  subwin.refresh()
+
   subwin.getch()
 
 def menu_sendmsg(scr):
