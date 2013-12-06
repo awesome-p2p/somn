@@ -54,7 +54,7 @@ class SomnPacket:
             self.PacketFields['SourceID'] = 0
             self.PacketFields['DestID'] = 0
             self.PacketFields['LastNodeID'] = 0
-            self.PacketFields['RouteRequestCode'] = 0
+            self.PacketFields['RouteRequestCode'] = 1
             self.PacketFields['HTL'] = 0
             self.PacketFields['ReturnRoute'] = 0
         elif packetType == SomnPacketType.BadRoute:
@@ -62,6 +62,7 @@ class SomnPacket:
             self.PacketFields['Flags'] = 0x2
             self.PacketFields['SourceID'] = 0
             self.PacketFields['DestID'] = 0
+            self.PacketFields['RouteRequestCode'] = 2
         elif (packetType == SomnPacketType.AddConnection
           or packetType == SomnPacketType.DropConnection
           or packetType == SomnPacketType.NodeEnrollment):
@@ -88,7 +89,7 @@ class SomnPacket:
         elif self.PacketType == SomnPacketType.RouteRequest:
             word1 = ((self.PacketFields['Flags'] << 30) & 0xC0000000) | self.PacketFields['Route']
             word2 = (self.PacketFields['DestID'] << 16) | (self.PacketFields['SourceID'] & 0xFFFF)
-            word3 = ((self.PacketFields['HTL'] << 27) & 0xF0000000) | (self.PacketFields['RouteRequestCode'] << 16) | (self.PacketFields['LastNodeID'] & 0xFFFF)
+            word3 = ((self.PacketFields['HTL'] << 28) & 0xF0000000) | (self.PacketFields['RouteRequestCode'] << 16) | (self.PacketFields['LastNodeID'] & 0xFFFF)
             word4 = self.PacketFields['ReturnRoute'] 
             return struct.pack('!IIII', word1, word2, word3, word4)
 
@@ -148,7 +149,7 @@ class SomnPacket:
             if code == 1:
                 self.PacketType = SomnPacketType.RouteRequest
                 self.PacketFields['LastNodeID'] = decoded[2] & 0xFFFF
-                self.PacketFields['HTL'] = (decoded[2] >> 27)
+                self.PacketFields['HTL'] = (decoded[2] >> 28)
                 self.PacketFields['ReturnRoute'] = decoded[3] & 0x3FFFFFFF
 
             #if code = 2, bad route
@@ -254,23 +255,19 @@ if __name__ == "__main__":
     #print(p1.PacketFields)
 
     p2 = SomnPacket()
-    p2.InitEmpty(SomnPacketType.AddConnection)
-    print(p2.PacketFields)
+    p2.InitEmpty(SomnPacketType.RouteRequest)
 
-    p2.PacketFields['AckSeq'] = 0xA
-    p2.PacketFields['ReqNodeID'] = 0xFF
-    p2.PacketFields['RespNodeID'] = 0xAB
-    p2.PacketFields['ReqNodePort'] = 0xAA
-    p2.PacketFields['RespNodePort'] = 0x77
-    p2.PacketFields['ReqNodeIP'] = 0xF0
-    p2.PacketFields['RespNodeIP'] = 0x01
+    p2.PacketFields['Route'] = 0x0
+    p2.PacketFields['HTL'] = 0x1
 
     raw = p2.ToBytes()
-    print(raw)
+    #print(raw)
 
     p3 = SomnPacket()
     p3.Decode(raw)
+    print("P2: ({0})".format(p2.PacketType))
     print(p2.PacketFields)
+    print("P3: ({0})".format(p3.PacketType))
     print(p3.PacketFields)
 
 
