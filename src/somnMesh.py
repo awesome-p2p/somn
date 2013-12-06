@@ -246,7 +246,7 @@ class somnMesh(threading.Thread):
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] + 1
               RxPkt.PacketFields['ReturnRoute'] = 0
               TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
-              TxPkt = somnPkt.SomnPacket(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
+              TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
               self.TCPRxQ.task_done()
               continue
