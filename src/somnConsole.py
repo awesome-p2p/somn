@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.2
+#!/usr/bin/python3.3
 
 import somnMesh
 import curses
