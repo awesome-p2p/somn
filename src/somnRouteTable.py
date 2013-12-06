@@ -44,6 +44,18 @@ class somnRoutingTable:
   def getAvailRouteCount(self):
     return 5 - self._nodeCount
 
+  def getConnectedNodes():
+    connectedNodes = list()
+    for node in _nodeTable:
+      if node is not None:
+        connectedNodes.append(node)
+    return connectedNodes
+
+  def removeNodeByIndex(self, index):
+    self._nodeTable[index] = None
+    self._nodeCount -= 1
+
+
   def clearTable(self):
     self._nodeCount = 0
     self._nodeTable = [None, None, None, None, None]
