@@ -63,7 +63,7 @@ class somnMesh(threading.Thread):
         self._printCallbackFunction(self.nodeID, outputStr)
 
   def enroll(self):
-    self.printinfo("enrolling")
+    #self.printinfo("enrolling")
     tcpRespTimeout = False
     ACK = random.getrandbits(16)
     enrollPkt = somnPkt.SomnPacket()
@@ -111,7 +111,7 @@ class somnMesh(threading.Thread):
       if Rx.bound and Tx.bound: break
     
     self.nodePort = Rx.port
-    self.printinfo("Port: {0}".format(self.nodePort))
+    #self.printinfo("Port: {0}".format(self.nodePort))
    
     enrollAttempts = 0
     
@@ -211,7 +211,7 @@ class somnMesh(threading.Thread):
               self.connCache[idx] = (('',0),) 
               # add node
               self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], Int2IP(RxPkt.PacketFields['ReqNodeIP']), RxPkt.PacketFields['ReqNodePort'])
-              self.printinfo("Enrolled Node:{0:04X} ".format(RxPkt.PacketFields['ReqNodeID']))
+              #self.printinfo("Enrolled Node:{0:04X} ".format(RxPkt.PacketFields['ReqNodeID']))
               break
 
       elif pktType == somnPkt.SomnPacketType.Message:
