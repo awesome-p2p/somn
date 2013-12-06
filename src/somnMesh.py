@@ -52,6 +52,7 @@ class somnMesh(threading.Thread):
     
     self.pendingRouteID = 0
     self.pendingRoute = 0
+    self.pendingRouteHTL = 1
     self.routeLock = threading.Lock()
     self.routeBlock = threading.Event()
 
@@ -159,6 +160,7 @@ class somnMesh(threading.Thread):
       route = self._getRoute(TxData.nodeID)
       #TODO Lock around this 
       self.pendingRouteID = 0 
+      self.pendingRouteHTL = 1
     if route == 0: # no valid rout found
       self.printinfo(" *** NO ROUTE FOUND *** ")
       return
@@ -243,9 +245,10 @@ class somnMesh(threading.Thread):
               continue
             elif RxPkt.PacketFields['HTL'] < 10:
               self.routeLock.release()
-              RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] + 1
+              RxPkt.PacketFields['HTL'] = self.pendingRouteHTL + 1
               RxPkt.PacketFields['ReturnRoute'] = 0
               TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
+              RxPkt.PacketFields['LastNodeID'] = self.nodeID
               TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
               self.TCPRxQ.task_done()
