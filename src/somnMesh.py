@@ -215,10 +215,11 @@ class somnMesh(threading.Thread):
               break
 
       elif pktType == somnPkt.SomnPacketType.Message:
-        print("({0:X}) Message Packet Received".format(self.nodeID))
+        #print("({0:X}) Message Packet Received".format(self.nodeID))
         # Check if we are the dest node
         if RxPkt.PacketFields['DestID'] == self.nodeID:
-          print(RxPkt.PacketFields['Message'])
+          #print(RxPkt.PacketFields['Message'])
+          self.printinfo("{0} -> {1}: {2}".format(RxPkt.PacketFields['DestID'], self.nodeID, RxPkt.PacketFields['Message']))
           # self.commRxQ.put(RxPkt) # TODO: strip headers before pushing onto queue
         # otherwise, propagate the message along the route
         elif not RxPkt.PacketFields['Route']:
