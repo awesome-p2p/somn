@@ -75,7 +75,7 @@ class somnMesh(threading.Thread):
 
     udp = somnUDP.somnUDPThread(enrollPkt, self.UDPRxQ, self.networkAlive, self.UDPAlive)
     udp.start()
-    while not tcpRespTimeout and self.routeTable.getNodeCount() < 3: 
+    while not tcpRespTimeout and self.routeTable.getNodeCount() < 1: 
       try:
         enrollResponse = self.TCPRxQ.get(timeout = 1)
       except queue.Empty:
@@ -84,7 +84,7 @@ class somnMesh(threading.Thread):
       respNodeID = enrollResponse.PacketFields['RespNodeID']
       respNodeIP = enrollResponse.PacketFields['RespNodeIP']
       respNodePort = enrollResponse.PacketFields['RespNodePort']
-      self.printinfo("Got enrollment response from {0:04X}".format(respNodeID))
+      #self.printinfo("Got enrollment response from {0:04X}".format(respNodeID))
       self.routeTable.getNodeIndexFromId(respNodeID)
       if  self.routeTable.getNodeIndexFromId(respNodeID) > 0:
         continue
@@ -197,7 +197,7 @@ class somnMesh(threading.Thread):
       except:
         continue
       pktType = RxPkt.PacketType
-      self.printinfo("Rx'd TCP packet of type: {0}".format(pktType))
+      #self.printinfo("Rx'd TCP packet of type: {0}".format(pktType))
       if pktType == somnPkt.SomnPacketType.NodeEnrollment:
         #print("Enrollment Packet Received")
         # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
@@ -231,12 +231,12 @@ class somnMesh(threading.Thread):
           self.TCPTxQ.put(TxPkt)
       
       elif pktType == somnPkt.SomnPacketType.RouteRequest:
-        print("Route Req Packet Received")
+        #print("Route Req Packet Received")
         if RxPkt.PacketFields['SourceID'] == self.nodeID:
           # this our route request, deal with it.
           self.routeLock.acquire()
           if self.pendingRouteID == RxPkt.PacketFields['DestID']:
-            self.printinfo("Servicing Returned Route for {0:04X}".format(self.pendingRouteID))
+            #self.printinfo("Servicing Returned Route for {0:04X}".format(self.pendingRouteID))
             if RxPkt.PacketFields['Route'] != 0:
               self.pendingRoute = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
               self.routeBlock.set()
@@ -245,7 +245,8 @@ class somnMesh(threading.Thread):
               continue
             elif RxPkt.PacketFields['HTL'] < 10:
               self.routeLock.release()
-              RxPkt.PacketFields['HTL'] = self.pendingRouteHTL + 1
+              self.pendingRouteHTL = self.pendingRouteHTL + 1
+              RxPkt.PacketFields['HTL'] = self.pendingRouteHTL
               RxPkt.PacketFields['ReturnRoute'] = 0
               TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
               RxPkt.PacketFields['LastNodeID'] = self.nodeID
@@ -265,7 +266,7 @@ class somnMesh(threading.Thread):
           idx = self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['DestID'])
           if idx < 0: # Continue route request
             if RxPkt.PacketFields['HTL'] > 1:
-              print("got multi Hop route request")
+              #print("got multi Hop route request")
               RxPkt.PacketFields['ReturnRoute'] = self._pushRoute(RxPkt.PacketFields['ReturnRoute'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID'])) 
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
               lastID = RxPkt.PacketFields['LastNodeID'] 
@@ -305,13 +306,13 @@ class somnMesh(threading.Thread):
             TxIndex = self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID'])
             RxPkt.PacketFields['LastNodeID'] = self.nodeID
             TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
-            print("Dest Node Found: ",RxPkt.PacketFields)
+            #print("Dest Node Found: ",RxPkt.PacketFields)
             TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
             self.TCPTxQ.put(TxPkt)
         else: # route path is non-empty
           RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
           RxPkt.PacketFields['LastNodeID'] = self.nodeID
-          print("Route Non Empty: ",RxPkt.PacketFields)
+          #print("Route Non Empty: ",RxPkt.PacketFields)
           TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
           TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
           TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
@@ -367,10 +368,10 @@ class somnMesh(threading.Thread):
     if enrollRequest.PacketFields['ReqNodeID'] == self.nodeID:
       return
 
-    self.printinfo("Got enrollment request from {0:04X}".format(enrollRequest.PacketFields['ReqNodeID']))
+    #self.printinfo("Got enrollment request from {0:04X}".format(enrollRequest.PacketFields['ReqNodeID']))
 
     if self.routeTable.getNodeIndexFromId(enrollRequest.PacketFields['ReqNodeID']) > 0: 
-      self.printinfo("Node already connected, ignoring")
+      #self.printinfo("Node already connected, ignoring")
       #self.UDPRxQ.task_done()
       return
 
@@ -417,15 +418,15 @@ class somnMesh(threading.Thread):
     idx = 1
     while idx <= self.routeTable.getNodeCount():
       TxNodeInfo = self.routeTable.getNodeInfoByIndex(idx)
-      print("getRoute Packet Type: ", routePkt.PacketFields)
+      #print("getRoute Packet Type: ", routePkt.PacketFields)
       TxPkt = somnPkt.SomnPacketTxWrapper(routePkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
       self.TCPTxQ.put(TxPkt)
       idx = idx + 1
     t.start()  
-    self.printinfo("Waiting for route")
+    #self.printinfo("Waiting for route")
     self.routeBlock.wait()
     self.routeBlock.clear()
-    self.printinfo("Waiting Done") 
+    #self.printinfo("Waiting Done") 
     try:
       t.cancel()
     except:
@@ -435,12 +436,12 @@ class somnMesh(threading.Thread):
   def _routeTimeout(self):
     self.routeLock.acquire()
     if not self.routeBlock.isSet():
-      self.printinfo("routeTimer Activate")
+      #self.printinfo("routeTimer Activate")
       self.pendingRoute = 0
       self.pendingRouteID = 0
       self.routeBlock.set()
     self.routeLock.release()
-    self.printinfo("routeTimer exit")
+    #self.printinfo("routeTimer exit")
 
 
   def _popRoute(self, route):
