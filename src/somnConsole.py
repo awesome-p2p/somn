@@ -14,9 +14,6 @@ ipcMgr = multiprocessing.Manager()
 #Output list written to by all nodes
 globalNodeOutput = ipcMgr.list()
 
-#Node list
-nodeList = ipcMgr.list()
-
 #Node dictionary
 nodeDict = dict()
 
@@ -31,7 +28,7 @@ def startupNewNode(txq, rxq, cmdpipe):
   node = somnMesh.somnMesh(nodetxq, noderxq, nodePrintCallback)
   node.start()
 
-  time.sleep(1)
+  time.sleep(0.1)
   #while node._mainLoopRunning:
   while True:
     #put anything on txq on nodetxq
@@ -45,11 +42,13 @@ def startupNewNode(txq, rxq, cmdpipe):
     try:
       nextrx = noderxq.get(False)
       rxq.put(nextrx)
+      globalNodeOutput.append(nextrx.data)
+      print("Got something in RXQ: {0}".format(nextrx.data))
     except:
       pass
 
     #get next command
-    if cmdpipe.poll(0.5):
+    if cmdpipe.poll(0.2):
       nextcmd = cmdpipe.recv()
 
       if nextcmd == "GETID":
@@ -78,12 +77,11 @@ def menu_addnode(scr):
   p.start()
 
   #wait for node to start and get node id
-  time.sleep(1)
+  time.sleep(0.1)
   pipeCon1.send("GETID")
   nodeid = pipeCon1.recv()
 
   nodeDict[nodeid] = (txq, rxq, pipeCon1)
-  print("Added node: {0}".format(nodeid))
 
 def menu_quit(scr):
   global uiRunning
@@ -111,14 +109,16 @@ def menu_print(scr):
   #write dot file footer
   f.write("}")
   
-  subwin = scr.derwin(20, 40, 10, 20)
+  subwin = scr.derwin(4, 20, 20, 25)
   subwin.border()
-  subwin.addstr(1,1, "File written")
+  subwin.addstr(1,1, "DOT File Written")
+  subwin.addstr(2,1, "(Press Any Key)")
   subwin.refresh()
   subwin.getch()
 
 def menu_showconns(scr):
-  subwin = scr.derwin(20, 40, 10, 20)
+  maxlines = 16
+  subwin = scr.derwin(20, 20, 10, 40)
   subwin.border()
 
   conns = []
@@ -129,17 +129,21 @@ def menu_showconns(scr):
 
   line = 1
   for connentry in conns:
+    if line > maxlines:
+      subwin.addstr(line, 1, "...")
+      break
     srcnode = connentry[0]
     for destnode in connentry[1]:
       subwin.addstr(line, 1, "{0:04X} -> {1:04X}".format(srcnode, destnode))
       line += 1
 
+  subwin.addstr(18, 1, "Press Any Key")
   subwin.refresh()
 
   subwin.getch()
 
 def menu_sendmsg(scr):
-  subwin = scr.derwin(5, 40, 10, 20)
+  subwin = scr.derwin(5, 40, 10, 40)
 
   #get source node
   subwin.border()
@@ -176,12 +180,11 @@ def menu_sendmsg(scr):
     subwin.addstr(2,1, "(Press any key)")
     subwin.getch()
 
-  subwin.getch()
-
 menuOptions = [
     ('A', 'Add Node', menu_addnode),
     #('K', 'Kill Nodes', None),
     ('P', 'Print Graph', menu_print),
+    ('C', 'Show Connections', menu_showconns),
     ('S', 'Send Message', menu_sendmsg),
     ('Q', 'Quit', menu_quit)]
 
