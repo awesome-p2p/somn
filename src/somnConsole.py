@@ -28,7 +28,7 @@ def startupNewNode(txq, rxq, cmdpipe):
   node = somnMesh.somnMesh(nodetxq, noderxq, nodePrintCallback)
   node.start()
 
-  time.sleep(1)
+  time.sleep(0.1)
   #while node._mainLoopRunning:
   while True:
     #put anything on txq on nodetxq
@@ -48,7 +48,7 @@ def startupNewNode(txq, rxq, cmdpipe):
       pass
 
     #get next command
-    if cmdpipe.poll(0.5):
+    if cmdpipe.poll(0.2):
       nextcmd = cmdpipe.recv()
 
       if nextcmd == "GETID":
@@ -77,7 +77,7 @@ def menu_addnode(scr):
   p.start()
 
   #wait for node to start and get node id
-  time.sleep(1)
+  time.sleep(0.1)
   pipeCon1.send("GETID")
   nodeid = pipeCon1.recv()
 
@@ -118,7 +118,7 @@ def menu_print(scr):
 
 def menu_showconns(scr):
   maxlines = 16
-  subwin = scr.derwin(20, 40, 10, 20)
+  subwin = scr.derwin(20, 20, 10, 40)
   subwin.border()
 
   conns = []
@@ -143,7 +143,7 @@ def menu_showconns(scr):
   subwin.getch()
 
 def menu_sendmsg(scr):
-  subwin = scr.derwin(5, 40, 10, 20)
+  subwin = scr.derwin(5, 40, 10, 40)
 
   #get source node
   subwin.border()
