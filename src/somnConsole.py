@@ -12,28 +12,42 @@ ipcMgr = multiprocessing.Manager()
 #Output list written to by all nodes
 globalNodeOutput = ipcMgr.list()
 
+#Node list
+nodeList = ipcMgr.list()
 
-def startupNewNode(nodeOutputList):
+
+def startupNewNode():
   node = somnMesh.CreateNode(nodePrintCallback)
   node.start()
+  nodeList.append(node.nodeID)
   node.join()
+  nodeList.remove(node.nodeID)
 
 def nodePrintCallback(nodeId, outputStr):
   globalNodeOutput.append("{0:04X}: {1}".format(nodeId, outputStr))
   
 def menu_addnode(scr):
   outputList = globalNodeOutput
-  p = multiprocessing.Process(target=startupNewNode, args=(outputList,) , daemon=True)
+  p = multiprocessing.Process(target=startupNewNode, daemon=True)
   p.start()
 
 def menu_quit(scr):
   global uiRunning
   uiRunning = False
 
+def menu_print(scr):
+  
+  pass
+
+def menu_sendmsg(scr):
+  pass
+
 menuOptions = [
     ('A', 'Add Node', menu_addnode),
     ('K', 'Kill Nodes', None),
-    ('Q', 'Quit', menu_quit)]
+    ('Q', 'Quit', menu_quit),
+    ('P', 'Print Graph', menu_print)
+    ('S', 'Send Message', menu_sendmsg)]
 
 def drawMenu(scr):
   x = 4
@@ -59,21 +73,32 @@ def drawNodeOutput(scr):
     for line in globalNodeOutput:
       scr.addstr(y, x, line)
       y += 1
+
+def drawNodeList(scr):
+  x = 80
+  y = 5
+  scr.addstr(y, x, "NODE LIST:")
+  y += 1
+
+  for line in nodeList:
+    scr.addstr(y, x, "{0:04X}".format(line))
+    y += 1
   
 def uiMain(mainscr):
+  mainscr.timeout(500)
   while uiRunning:
     screenwidth = mainscr.getmaxyx()[1]
     screenheight = mainscr.getmaxyx()[0]
 
 
     mainscr.clear()
-    mainscr.timeout(500)
-    mainscr.hline(0,0,'=',screenwidth)
+    mainscr.border()
     mainscr.addstr(1,1, "SOMN Control Panel")
-    mainscr.hline(2,0,'=',screenwidth)
+    mainscr.hline(2,1,'=',screenwidth - 2)
 
     drawMenu(mainscr)
     drawNodeOutput(mainscr)
+    drawNodeList(mainscr)
 
     mainscr.refresh()
     mainscr.addstr(3,1, "Active Processes: {0}".format(len(multiprocessing.active_children())))
