@@ -46,9 +46,9 @@ class somnRoutingTable:
 
   def getConnectedNodes(self):
     connectedNodes = list()
-    for node in _nodeTable:
+    for node in self._nodeTable:
       if node is not None:
-        connectedNodes.append(node)
+        connectedNodes.append(node.nodeID)
     return connectedNodes
 
   def removeNodeByIndex(self, index):
