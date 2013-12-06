@@ -35,7 +35,7 @@ class RxThread(threading.Thread):
       print(msg)
       self.RxAlive.clear()
  
-    print("Rx Thread Bound")
+    #print("Rx Thread Bound")
     self.port = skt.getsockname()[1]
     self.bound = 1
     while (self.RxAlive.is_set() and  (skt != None)):      

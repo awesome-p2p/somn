@@ -12,7 +12,7 @@ networkAlive = True
 
 def globalSocketHandler():
     global globalSocketRunning
-    print("Starting global socket handler")
+    #print("Starting global socket handler")
     globalSocketRunning = True
   
     udpSkt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
