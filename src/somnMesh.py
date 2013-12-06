@@ -12,7 +12,7 @@ import socket
 import time
 import random
 
-PING_TIMEOUT = 1
+PING_TIMEOUT = 5
 
 class somnData():
   def __init__(self, ID, data):
@@ -58,7 +58,7 @@ class somnMesh(threading.Thread):
     self.routeLock = threading.Lock()
     self.routeBlock = threading.Event()
 
-    self.pingTimer = threading.Timer(PING_TIMEOUT, self._pingRouteTable)
+    self.pingTimer = threading.Timer(random.randrange(45,90), self._pingRouteTable)
     self.pingCache = [0,0,0,0,0]
     self.pingLock = threading.Lock()
 
@@ -165,6 +165,7 @@ class somnMesh(threading.Thread):
     for idx, node in enumerate(self.pingCache):
       if node != 0:
         # remove nodes where no response was returned
+        self.printinfo("Dropping Node: {0:04X}".format(node))
         self.routeTable.removeNodeByIndex(self.routeTable.getNodeIndexFromId(node))
       # unset returned route cache
       self.pingCache[idx] = 0
@@ -185,7 +186,7 @@ class somnMesh(threading.Thread):
       TxInfo = self.routeTable.getNodeInfoByIndex(nodeIndex)
       TxPkt = somnPkt.SomnPacketTxWrapper(pingPkt, TxInfo.nodeAddress, TxInfo.nodePort)
       self.TCPTxQ.put(TxPkt)
-    self.pingTimer = threading.Timer(PING_TIMEOUT, self._pingRouteTable)
+    self.pingTimer = threading.Timer(random.randrange(45,90), self._pingRouteTable)
     self.pingTimer.start()
 
   def _handleTx(self):
@@ -264,7 +265,7 @@ class somnMesh(threading.Thread):
               self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], Int2IP(RxPkt.PacketFields['ReqNodeIP']), RxPkt.PacketFields['ReqNodePort'])
               #self.printinfo("Enrolled Node:{0:04X} ".format(RxPkt.PacketFields['ReqNodeID']))
               break
-        self.pingTimer = threading.Timer(PING_TIMEOUT, self._pingRouteTable)
+        self.pingTimer = threading.Timer(random.randrange(45,90), self._pingRouteTable)
         self.pingTimer.start()
       elif pktType == somnPkt.SomnPacketType.Message:
         #print("({0:X}) Message Packet Received".format(self.nodeID))
@@ -284,6 +285,7 @@ class somnMesh(threading.Thread):
           if TxNodeInfo is None:
             # this should generate a bad route pacekt
             self.printinfo("Invalid Route Event")
+            self.TCPRxQ.task_done()
             continue
           TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort) 
           self.TCPTxQ.put(TxPkt)
@@ -319,6 +321,8 @@ class somnMesh(threading.Thread):
               if node == RxPkt.PacketFields['LastNodeID']:
                 self.pingCache[idx] = 0
             self.pingLock.release()
+            self.TCPRxQ.task_done()
+            continue
 
           else: # this route has been served
             #self.routeLock.release()
@@ -337,22 +341,25 @@ class somnMesh(threading.Thread):
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
               lastID = RxPkt.PacketFields['LastNodeID'] 
               RxPkt.PacketFields['LastNodeID'] = self.nodeID
-              #TODO: transmit to all nodes, except the transmitting node
+              #transmit to all nodes, except the transmitting node
               i = 1
               while i <= self.routeTable.getNodeCount():
                 TxNodeInfo = self.routeTable.getNodeInfoByIndex(i)
                 i = i + 1
-                if TxNodeInfo.nodeID == lastID:
-                  continue
-                TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
-                self.TCPTxQ.put(TxPkt)
-
+                if not TxNodeInfo.nodeID == lastID:
+                  #continue
+                  TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
+                  self.TCPTxQ.put(TxPkt)
+              self.TCPRxQ.task_done()
+              continue
             elif RxPkt.PacketFields['HTL'] == 1: # Last Node in query path
               RxPkt.PacketFields['HTL'] = RxPkt.PacketFields['HTL'] - 1
               TxNodeInfo = self.routeTable.getNodeInfoByIndex(self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
               RxPkt.PacketFields['LastNodeID'] = self.nodeID
               TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
+              self.TCPRxQ.task_done()
+              continue
             else:
               #if RxPkt.PacketFields['ReturnRoute'] == 0:
               #  TxIndex = self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['SourceID'])
@@ -362,6 +369,8 @@ class somnMesh(threading.Thread):
               TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
               TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
               self.TCPTxQ.put(TxPkt)
+              self.TCPRxQ.task_done()
+              continue
           else: # Dest Node is contained in route table
             RxPkt.PacketFields['HTL'] = 0
             RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['DestID'])) 
@@ -375,6 +384,8 @@ class somnMesh(threading.Thread):
             #print("Dest Node Found: ",RxPkt.PacketFields)
             TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
             self.TCPTxQ.put(TxPkt)
+            self.TCPRxQ.task_done()
+            continue
         else: # route path is non-empty
           RxPkt.PacketFields['Route'] = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
           RxPkt.PacketFields['LastNodeID'] = self.nodeID
@@ -383,8 +394,13 @@ class somnMesh(threading.Thread):
           TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
           TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
           self.TCPTxQ.put(TxPkt)
+          self.TCPRxQ.task_done()
+          continue
+      
       elif pktType == somnPkt.SomnPacketType.BadRoute:
         print("Bad Route Packet Received")
+        self.TCPRxQ.task_done()
+        continue
       
       elif pktType == somnPkt.SomnPacketType.AddConnection:
         for pendingConn in self.connCache:
