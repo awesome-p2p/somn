@@ -215,7 +215,7 @@ class somnMesh(threading.Thread):
               break
 
       elif pktType == somnPkt.SomnPacketType.Message:
-        print("Message Packet Received")
+        print("({0:X}) Message Packet Received".format(self.nodeID))
         # Check if we are the dest node
         if RxPkt.PacketFields['DestID'] == self.nodeID:
           print(RxPkt.PacketFields['Message'])
