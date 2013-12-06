@@ -81,7 +81,7 @@ class somnMesh(threading.Thread):
 
     udp = somnUDP.somnUDPThread(enrollPkt, self.UDPRxQ, self.networkAlive, self.UDPAlive)
     udp.start()
-    while not tcpRespTimeout and self.routeTable.getNodeCount() < 1: 
+    while not tcpRespTimeout and self.routeTable.getNodeCount() < 3: 
       try:
         enrollResponse = self.TCPRxQ.get(timeout = 1)
       except queue.Empty:
@@ -93,6 +93,7 @@ class somnMesh(threading.Thread):
       #self.printinfo("Got enrollment response from {0:04X}".format(respNodeID))
       self.routeTable.getNodeIndexFromId(respNodeID)
       if  self.routeTable.getNodeIndexFromId(respNodeID) > 0:
+        self.TCPRxQ.task_done()
         continue
       elif enrollResponse.PacketType == somnPkt.SomnPacketType.NodeEnrollment and enrollResponse.PacketFields['AckSeq'] == ACK:
         if self.routeTable.addNode(respNodeID, Int2IP(respNodeIP), respNodePort) < 0:
@@ -228,6 +229,11 @@ class somnMesh(threading.Thread):
     TxPkt.PacketFields['Route'] = newRoute
     #create wrapper packet to send to next step in route
     TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextRoute)
+    if TxNodeInfo is None:
+      self.cacheRoute[self.cacheId.index(TxData.nodeID)] = 0
+      self.CommTxQ.task_done()
+      self.CommTxQ.put(TxData)
+      return
     txPktWrapper = somnPkt.SomnPacketTxWrapper(TxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
 
     #send packet to TX layer
@@ -244,6 +250,7 @@ class somnMesh(threading.Thread):
       #self.printinfo("Rx'd TCP packet of type: {0}".format(pktType))
       if pktType == somnPkt.SomnPacketType.NodeEnrollment:
         #print("Enrollment Packet Received")
+        self.pingTimer.cancel()
         # There is a potential for stale enroll responses from enrollment phase, drop stale enroll responses
         if RxPkt.PacketFields['ReqNodeID'] == self.nodeID: continue 
         # We need to disable a timer, enroll the node, if timer has expired, do nothing
@@ -257,14 +264,16 @@ class somnMesh(threading.Thread):
               self.routeTable.addNode(RxPkt.PacketFields['ReqNodeID'], Int2IP(RxPkt.PacketFields['ReqNodeIP']), RxPkt.PacketFields['ReqNodePort'])
               #self.printinfo("Enrolled Node:{0:04X} ".format(RxPkt.PacketFields['ReqNodeID']))
               break
-
+        self.pingTimer = threading.Timer(PING_TIMEOUT, self._pingRouteTable)
+        self.pingTimer.start()
       elif pktType == somnPkt.SomnPacketType.Message:
         #print("({0:X}) Message Packet Received".format(self.nodeID))
         # Check if we are the dest node
         if RxPkt.PacketFields['DestID'] == self.nodeID:
-          #print(RxPkt.PacketFields['Message'])
-          self.printinfo("{0} -> {1}: {2}".format(RxPkt.PacketFields['DestID'], self.nodeID, RxPkt.PacketFields['Message']))
-          # self.commRxQ.put(RxPkt) # TODO: strip headers before pushing onto queue
+          self.printinfo("{0:04X} -> {1:04X}: {2}".format(RxPkt.PacketFields['SourceID'], self.nodeID, RxPkt.PacketFields['Message']))
+          # strip headers before pushing onto queue
+          commData = somnData(RxPkt.PacketFields['SourceID'], RxPkt.PacketFields['Message'])
+          self.CommRxQ.put(commData)
         # otherwise, propagate the message along the route
         elif not RxPkt.PacketFields['Route']:
           # generate bad_route event
@@ -272,6 +281,10 @@ class somnMesh(threading.Thread):
         else:
           nextHop, RxPkt.PacketFields['Route'] = self._popRoute(RxPkt.PacketFields['Route'])
           TxNodeInfo = self.routeTable.getNodeInfoByIndex(nextHop) 
+          if TxNodeInfo is None:
+            # this should generate a bad route pacekt
+            self.printinfo("Invalid Route Event")
+            continue
           TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort) 
           self.TCPTxQ.put(TxPkt)
       
