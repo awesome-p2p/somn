@@ -9,8 +9,9 @@ class somnRoutingTableEntry:
 
 class somnRoutingTable:
   
-  _nodeCount = 0
-  _nodeTable = [None, None, None, None, None]
+  def __init__(self):
+    self._nodeCount = 0
+    self._nodeTable = [None, None, None, None, None]
 
   def addNode(self, nodeid, addr, port):
     if(self._nodeCount >= 5):
@@ -52,8 +53,9 @@ class somnRoutingTable:
     return connectedNodes
 
   def removeNodeByIndex(self, index):
-    self._nodeTable[index] = None
-    self._nodeCount -= 1
+    if not self._nodeCount == 0:
+      self._nodeTable[index - 1] = None
+      self._nodeCount -= 1
 
 
   def clearTable(self):

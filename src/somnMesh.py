@@ -162,9 +162,7 @@ class somnMesh(threading.Thread):
     # check if previous route requests were returned
     self.pingLock.acquire()
     for idx, node in enumerate(self.pingCache):
-      #print("Node in pingCache: ", (idx, node))
       if node != 0:
-        print("Dropping Node")
         # remove nodes where no response was returned
         self.routeTable.removeNodeByIndex(self.routeTable.getNodeIndexFromId(node))
       # unset returned route cache
@@ -173,7 +171,6 @@ class somnMesh(threading.Thread):
     
     # send a RouteReqeust for node 0xFFFF to each entry in the routing table
     for node in self.routeTable.getConnectedNodes():
-      print("sending ping to: ", node)
       nodeIndex = self.routeTable.getNodeIndexFromId(node)
       self.pingLock.acquire()
       self.pingCache[nodeIndex - 1] = node
