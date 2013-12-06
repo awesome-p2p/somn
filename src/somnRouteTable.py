@@ -44,7 +44,7 @@ class somnRoutingTable:
   def getAvailRouteCount(self):
     return 5 - self._nodeCount
 
-  def getConnectedNodes():
+  def getConnectedNodes(self):
     connectedNodes = list()
     for node in _nodeTable:
       if node is not None:
