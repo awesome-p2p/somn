@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.2
+#!/usr/bin/python3.3
 
 import somnTCP
 import somnUDP
@@ -11,6 +11,8 @@ import threading
 import socket
 import time
 import random
+
+PING_TIMEOUT = 1
 
 class somnData():
   def __init__(self, ID, data):
@@ -55,6 +57,10 @@ class somnMesh(threading.Thread):
     self.pendingRouteHTL = 1
     self.routeLock = threading.Lock()
     self.routeBlock = threading.Event()
+
+    self.pingTimer = threading.Timer(PING_TIMEOUT, self._pingRouteTable)
+    self.pingCache = [0,0,0,0,0]
+    self.pingLock = threading.Lock()
 
   def printinfo(self, outputStr):
       if self._printCallbackFunction == None:
@@ -132,16 +138,54 @@ class somnMesh(threading.Thread):
     self._mainLoopRunning = 1
     rxThread = threading.Thread(target = self._handleTcpRx)
     rxThread.start()
+    self.pingTimer.start()
     while self._mainLoopRunning:
       self._handleUdpRx()
       self._handleTx()
 
     # Do a bunch of stuff
+    try:
+      self.pingTimer.cancel()
+    except:
+      pass
     self.networkAlive.clear()
     UDP.networkAlive = False
     UDP.join()
     Rx.join()
     Tx.join()
+    self.TCPRxQ.join()
+    self.TCPTxQ.join()
+    self.CommTxQ.join()
+    self.CommRxQ.join()
+
+  def _pingRouteTable(self):
+    # check if previous route requests were returned
+    self.pingLock.acquire()
+    for idx, node in enumerate(self.pingCache):
+      if node != 0:
+        # remove nodes where no response was returned
+        self.routeTable.removeNodeByIndex(self.routeTable.getNodeIndexFromId(node))
+      # unset returned route cache
+      self.pingCache[idx] = 0
+    self.pingLock.release()
+    
+    # send a RouteReqeust for node 0xFFFF to each entry in the routing table
+    for node in self.routeTable.getConnectedNodes():
+      nodeIndex = self.routeTable.getNodeIndexFromId(node)
+      self.pingLock.acquire()
+      self.pingCache[nodeIndex - 1] = node
+      self.pingLock.release()
+      pingPkt = somnPkt.SomnPacket()
+      pingPkt.InitEmpty(somnPkt.SomnPacketType.RouteRequest)
+      pingPkt.PacketFields['SourceID'] = self.nodeID
+      pingPkt.PacketFields['LastNodeID'] = self.nodeID
+      pingPkt.PacketFields['DestID'] = 0xFFFF
+      pingPkt.PacketFields['HTL'] = 1
+      TxInfo = self.routeTable.getNodeInfoByIndex(nodeIndex)
+      TxPkt = somnPkt.SomnPacketTxWrapper(pingPkt, TxInfo.nodeAddress, TxInfo.nodePort)
+      self.TCPTxQ.put(TxPkt)
+    self.pingTimer = threading.Timer(PING_TIMEOUT, self._pingRouteTable)
+    self.pingTimer.start()
 
   def _handleTx(self):
     #print("Handle TX")
@@ -235,8 +279,8 @@ class somnMesh(threading.Thread):
         #print("Route Req Packet Received")
         if RxPkt.PacketFields['SourceID'] == self.nodeID:
           # this our route request, deal with it.
-          self.routeLock.acquire()
           if self.pendingRouteID == RxPkt.PacketFields['DestID']:
+            self.routeLock.acquire()
             #self.printinfo("Servicing Returned Route for {0:04X}".format(self.pendingRouteID))
             if RxPkt.PacketFields['Route'] != 0:
               self.pendingRoute = self._pushRoute(RxPkt.PacketFields['Route'], self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['LastNodeID']))
@@ -255,14 +299,22 @@ class somnMesh(threading.Thread):
               self.TCPTxQ.put(TxPkt)
               self.TCPRxQ.task_done()
               continue
+          
+          elif RxPkt.PacketFields['DestID'] == 0xFFFF:
+            self.pingLock.acquire()
+            for idx, node in enumerate(self.pingCache):
+              if node == RxPkt.PacketFields['LastNodeID']:
+                self.pingCache[idx] = 0
+            self.pingLock.release()
+
           else: # this route has been served
-            self.routeLock.release()
+            #self.routeLock.release()
             #RxPkt.Reset()
             self.TCPRxQ.task_done()
             continue 
         # if route field is -0-, then it is an in-progress route request
         # otherwise it is a returning route request
-        if not RxPkt.PacketFields['Route']:
+        elif not RxPkt.PacketFields['Route']:
           # check if we have the destid in our routeTable
           idx = self.routeTable.getNodeIndexFromId(RxPkt.PacketFields['DestID'])
           if idx < 0: # Continue route request

@@ -129,6 +129,7 @@ class TxThread(threading.Thread):
           # this should generate a bad route event
           print("bad Route")
           print(packet.Packet.PacketFields)
+          self.TxQ.task_done()
           continue
         # hack for socket test
         totalsent = 0
