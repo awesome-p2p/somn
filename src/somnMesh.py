@@ -315,7 +315,7 @@ class somnMesh(threading.Thread):
           TxIndex, RxPkt.PacketFields['ReturnRoute'] = self._popRoute(RxPkt.PacketFields['ReturnRoute'])
           TxNodeInfo = self.routeTable.getNodeInfoByIndex(TxIndex)
           TxPkt = somnPkt.SomnPacketTxWrapper(RxPkt, TxNodeInfo.nodeAddress, TxNodeInfo.nodePort)
-          self.TxQ.put(TxPkt)
+          self.TCPTxQ.put(TxPkt)
       elif pktType == somnPkt.SomnPacketType.BadRoute:
         print("Bad Route Packet Received")
       
