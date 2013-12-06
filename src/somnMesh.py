@@ -75,7 +75,7 @@ class somnMesh(threading.Thread):
 
     udp = somnUDP.somnUDPThread(enrollPkt, self.UDPRxQ, self.networkAlive, self.UDPAlive)
     udp.start()
-    while not tcpRespTimeout and self.routeTable.getNodeCount() < 1: 
+    while not tcpRespTimeout and self.routeTable.getNodeCount() < 3: 
       try:
         enrollResponse = self.TCPRxQ.get(timeout = 1)
       except queue.Empty:
@@ -375,7 +375,7 @@ class somnMesh(threading.Thread):
       return
 
     
-    if self.routeTable.getAvailRouteCount() > 2 or (self.lastEnrollReq == enrollRequest.PacketFields['ReqNodeID'] and self.routeTable.getAvailRouteCount() > 0):
+    if self.routeTable.getAvailRouteCount() > 4 or (self.lastEnrollReq == enrollRequest.PacketFields['ReqNodeID'] and self.routeTable.getAvailRouteCount() > 0):
       enrollRequest.PacketFields['RespNodeID'] = self.nodeID
       enrollRequest.PacketFields['RespNodeIP'] = IP2Int(self.nodeIP)
       enrollRequest.PacketFields['RespNodePort'] = self.nodePort
